@@ -33,15 +33,35 @@ type Config struct {
 	} `mapstructure:",squash"` // Allows it to find PORT at the top level of .env
 
 	Postgres struct {
-		Host           string `mapstructure:"PG_HOST"`
-		Port           int    `mapstructure:"PG_PORT"`
-		User           string `mapstructure:"PG_USER"`
-		Password       string `mapstructure:"PG_PASSWORD"`
-		CatalogDBName  string `mapstructure:"PG_CATALOG_DB_NAME"`
-		CartDBName     string `mapstructure:"PG_CART_DB_NAME"`
-		OrderDBName    string `mapstructure:"PG_ORDER_DB_NAME"`
-		PaymentDBName  string `mapstructure:"PG_PAYMENT_DB_NAME"`
-		IdentityDBName string `mapstructure:"PG_IDENTITY_DB_NAME"`
+		PgIdentityHost     string `mapstructure:"PG_IDENTITY_HOST"`
+		PgIdentityPort     int    `mapstructure:"PG_IDENTITY_PORT"`
+		PgIdentityUser     string `mapstructure:"PG_IDENTITY_USER"`
+		PgIdentityPassword string `mapstructure:"PG_IDENTITY_PASSWORD"`
+		PgIdentityDBName   string `mapstructure:"PG_IDENTITY_DB_NAME"`
+
+		PgCatalogHost     string `mapstructure:"PG_CATALOG_HOST"`
+		PgCatalogPort     int    `mapstructure:"PG_CATALOG_PORT"`
+		PgCatalogUser     string `mapstructure:"PG_CATALOG_USER"`
+		PgCatalogPassword string `mapstructure:"PG_CATALOG_PASSWORD"`
+		PgCatalogDBName   string `mapstructure:"PG_CATALOG_DB_NAME"`
+
+		PgCartHost     string `mapstructure:"PG_CART_HOST"`
+		PgCartPort     int    `mapstructure:"PG_CART_PORT"`
+		PgCartUser     string `mapstructure:"PG_CART_USER"`
+		PgCartPassword string `mapstructure:"PG_CART_PASSWORD"`
+		PgCartDBName   string `mapstructure:"PG_CART_DB_NAME"`
+
+		PgOrderHost     string `mapstructure:"PG_ORDER_HOST"`
+		PgOrderPort     int    `mapstructure:"PG_ORDER_PORT"`
+		PgOrderUser     string `mapstructure:"PG_ORDER_USER"`
+		PgOrderPassword string `mapstructure:"PG_ORDER_PASSWORD"`
+		PgOrderDBName   string `mapstructure:"PG_ORDER_DB_NAME"`
+
+		PgPaymentHost     string `mapstructure:"PG_PAYMENT_HOST"`
+		PgPaymentPort     int    `mapstructure:"PG_PAYMENT_PORT"`
+		PgPaymentUser     string `mapstructure:"PG_PAYMENT_USER"`
+		PgPaymentPassword string `mapstructure:"PG_PAYMENT_PASSWORD"`
+		PgPaymentDBName   string `mapstructure:"PG_PAYMENT_DB_NAME"`
 	} `mapstructure:",squash"`
 
 	JWT struct {

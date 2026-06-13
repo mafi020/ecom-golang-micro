@@ -27,9 +27,9 @@ type PaymentApp struct {
 
 func InitializePaymentApp() *PaymentApp {
 	cfg := config.LoadConfig()
-	payment_dsn := cfg.PostgresDSN(cfg.Postgres.User, cfg.Postgres.Password, cfg.Postgres.Host, cfg.Postgres.PaymentDBName, cfg.Postgres.Port)
+	payment_dsn := cfg.PostgresDSN(cfg.Postgres.PgPaymentUser, cfg.Postgres.PgPaymentPassword, cfg.Postgres.PgPaymentHost, cfg.Postgres.PgPaymentDBName, cfg.Postgres.PgPaymentPort)
 
-	db := infrastructure.NewPostgresDB(payment_dsn, cfg.Postgres.PaymentDBName)
+	db := infrastructure.NewPostgresDB(payment_dsn, cfg.Postgres.PgPaymentDBName)
 
 	if err := infrastructure.RunMigrations(payment_dsn, "migrations/payment"); err != nil {
 		log.Fatalf("failed to run payment migrations: %v", err)

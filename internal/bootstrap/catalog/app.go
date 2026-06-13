@@ -25,9 +25,9 @@ type CatalogApp struct {
 
 func InitializeCatalogApp() *CatalogApp {
 	cfg := config.LoadConfig()
-	catalog_dsn := cfg.PostgresDSN(cfg.Postgres.User, cfg.Postgres.Password, cfg.Postgres.Host, cfg.Postgres.CatalogDBName, cfg.Postgres.Port)
+	catalog_dsn := cfg.PostgresDSN(cfg.Postgres.PgCatalogUser, cfg.Postgres.PgCatalogPassword, cfg.Postgres.PgCatalogHost, cfg.Postgres.PgCatalogDBName, cfg.Postgres.PgCatalogPort)
 
-	db := infrastructure.NewPostgresDB(catalog_dsn, cfg.Postgres.CatalogDBName)
+	db := infrastructure.NewPostgresDB(catalog_dsn, cfg.Postgres.PgCatalogDBName)
 
 	if err := infrastructure.RunMigrations(catalog_dsn, "migrations/catalog"); err != nil {
 		log.Fatalf("failed to run catalog migrations: %v", err)

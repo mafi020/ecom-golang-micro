@@ -27,9 +27,9 @@ type OrderApp struct {
 
 func InitializeOrderApp() *OrderApp {
 	cfg := config.LoadConfig()
-	order_dsn := cfg.PostgresDSN(cfg.Postgres.User, cfg.Postgres.Password, cfg.Postgres.Host, cfg.Postgres.OrderDBName, cfg.Postgres.Port)
+	order_dsn := cfg.PostgresDSN(cfg.Postgres.PgOrderUser, cfg.Postgres.PgOrderPassword, cfg.Postgres.PgOrderHost, cfg.Postgres.PgOrderDBName, cfg.Postgres.PgOrderPort)
 
-	db := infrastructure.NewPostgresDB(order_dsn, cfg.Postgres.OrderDBName)
+	db := infrastructure.NewPostgresDB(order_dsn, cfg.Postgres.PgOrderDBName)
 
 	if err := infrastructure.RunMigrations(order_dsn, "migrations/order"); err != nil {
 		log.Fatalf("failed to run order migrations: %v", err)

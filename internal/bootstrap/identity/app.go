@@ -25,9 +25,9 @@ type IdentityApp struct {
 
 func InitializeIdentityApp() *IdentityApp {
 	cfg := config.LoadConfig()
-	identity_dsn := cfg.PostgresDSN(cfg.Postgres.User, cfg.Postgres.Password, cfg.Postgres.Host, cfg.Postgres.IdentityDBName, cfg.Postgres.Port)
+	identity_dsn := cfg.PostgresDSN(cfg.Postgres.PgIdentityUser, cfg.Postgres.PgIdentityPassword, cfg.Postgres.PgIdentityHost, cfg.Postgres.PgIdentityDBName, cfg.Postgres.PgIdentityPort)
 
-	db := infrastructure.NewPostgresDB(identity_dsn, cfg.Postgres.IdentityDBName)
+	db := infrastructure.NewPostgresDB(identity_dsn, cfg.Postgres.PgIdentityDBName)
 
 	if err := infrastructure.RunMigrations(identity_dsn, "migrations/identity"); err != nil {
 		log.Fatalf("failed to run identity migrations: %v", err)

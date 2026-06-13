@@ -27,9 +27,9 @@ type CartApp struct {
 
 func InitializeCartApp() *CartApp {
 	cfg := config.LoadConfig()
-	cart_dsn := cfg.PostgresDSN(cfg.Postgres.User, cfg.Postgres.Password, cfg.Postgres.Host, cfg.Postgres.CartDBName, cfg.Postgres.Port)
+	cart_dsn := cfg.PostgresDSN(cfg.Postgres.PgCartUser, cfg.Postgres.PgCartPassword, cfg.Postgres.PgCartHost, cfg.Postgres.PgCartDBName, cfg.Postgres.PgCartPort)
 
-	db := infrastructure.NewPostgresDB(cart_dsn, cfg.Postgres.CartDBName)
+	db := infrastructure.NewPostgresDB(cart_dsn, cfg.Postgres.PgCartDBName)
 
 	if err := infrastructure.RunMigrations(cart_dsn, "migrations/cart"); err != nil {
 		log.Fatalf("failed to run cart migrations: %v", err)
