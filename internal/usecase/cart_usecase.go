@@ -2,9 +2,14 @@ package usecase
 
 import (
 	"context"
+	"fmt"
+	"time"
 
-	"github.com/mafi020/ecom-golang/internal/apperrors"
-	"github.com/mafi020/ecom-golang/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
+	catalogpb "github.com/mafi020/ecom-golang-micro/proto/catalog"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type cartRepo interface {
@@ -14,7 +19,7 @@ type cartRepo interface {
 
 type cartItemRepo interface {
 	AddItem(ctx context.Context, cartID int64, item *entity.CartItem) (*entity.CartItem, error)
-	UpdateItemQuantity(ctx context.Context, cartID, productID int64, quantity int) (*entity.CartItem, error)
+	UpdateItemQuantity(ctx context.Context, cartID, productID int64, quantity int32) (*entity.CartItem, error)
 	RemoveItem(ctx context.Context, cartID, productID int64) error
 	ClearCart(ctx context.Context, cartID int64) error
 }
@@ -27,26 +32,35 @@ type CartUseCase struct {
 	cartRepo        cartRepo
 	cartItemRepo    cartItemRepo
 	cartProductRepo cartProductRepo
+	catalogClient   catalogpb.CatalogServiceClient
 }
 
-func NewCartUsecase(cartRepo cartRepo, cartItemRepo cartItemRepo, cartProductRepo cartProductRepo) *CartUseCase {
-	return &CartUseCase{cartRepo: cartRepo, cartItemRepo: cartItemRepo, cartProductRepo: cartProductRepo}
+func NewCartUsecase(
+	cartRepo cartRepo,
+	cartItemRepo cartItemRepo,
+	catalogClient catalogpb.CatalogServiceClient,
+) *CartUseCase {
+	return &CartUseCase{
+		cartRepo:      cartRepo,
+		cartItemRepo:  cartItemRepo,
+		catalogClient: catalogClient,
+	}
 }
 
 func (uc *CartUseCase) GetCart(ctx context.Context, userID int64) (*entity.Cart, error) {
 	return uc.cartRepo.GetCartByUserID(ctx, userID)
 }
 
-func (uc *CartUseCase) AddItem(ctx context.Context, userID, productID int64, quantity int) (*entity.Cart, error) {
+func (uc *CartUseCase) AddItem(ctx context.Context, userID, productID int64, quantity int32) (*entity.Cart, error) {
 	cart, product, totalQuantityRequested, err := uc.prepareAndValidateStock(ctx, userID, productID, quantity, false)
 	if err != nil {
 		return nil, err
 	}
 
 	_, err = uc.cartItemRepo.AddItem(ctx, cart.ID, &entity.CartItem{
-		ProductID: productID,
-		Quantity:  totalQuantityRequested,
-		Price:     product.Price,
+		ProductID:  productID,
+		Quantity:   totalQuantityRequested,
+		PriceCents: product.PriceCents,
 	})
 
 	if err != nil {
@@ -56,7 +70,7 @@ func (uc *CartUseCase) AddItem(ctx context.Context, userID, productID int64, qua
 	return uc.cartRepo.GetCartByUserID(ctx, userID)
 }
 
-func (uc *CartUseCase) UpdateItem(ctx context.Context, userID, productID int64, quantity int) (*entity.Cart, error) {
+func (uc *CartUseCase) UpdateItem(ctx context.Context, userID, productID int64, quantity int32) (*entity.Cart, error) {
 	cart, _, totalQuantityRequested, err := uc.prepareAndValidateStock(ctx, userID, productID, quantity, true)
 	if err != nil {
 		return nil, err
@@ -94,20 +108,39 @@ func (uc *CartUseCase) ClearCart(ctx context.Context, userID int64) error {
 func (uc *CartUseCase) prepareAndValidateStock(
 	ctx context.Context,
 	userID, productID int64,
-	inputQuantity int,
+	inputQuantity int32,
 	isAbsoluteUpdate bool,
-) (*entity.Cart, *entity.Product, int, error) {
-	product, err := uc.cartProductRepo.GetByID(ctx, productID)
-	if err != nil {
-		return nil, nil, 0, err
+) (*entity.Cart, *entity.Product, int32, error) {
+
+	rpcCtx, rpcCancel := context.WithTimeout(ctx, 2*time.Second)
+	defer rpcCancel()
+
+	resp, rpcErr := uc.catalogClient.GetProduct(rpcCtx, &catalogpb.GetProductRequest{Id: productID})
+	if rpcErr != nil {
+		if st, ok := status.FromError(rpcErr); ok && st.Code() == codes.NotFound {
+			return nil, nil, 0, &apperrors.NotFoundError{Resource: "product"}
+		}
+		return nil, nil, 0, fmt.Errorf("catalog microservice unavailable: %w", rpcErr)
 	}
 
+	protoProduct := resp.GetProduct()
+
+	// 3. Instantiate an internal ephemeral domain entity map using explicit types
+	// (Note: PriceCents matches perfectly because we switched proto definition to int64)
+	product := &entity.Product{
+		ID:         protoProduct.GetId(),
+		Name:       protoProduct.GetName(),
+		PriceCents: protoProduct.GetPriceCents(),
+		Stock:      protoProduct.GetStock(),
+	}
+
+	// 4. Fetch or generate customer shopping cart values
 	cart, err := uc.cartRepo.GetOrCreateCart(ctx, userID)
 	if err != nil {
 		return nil, nil, 0, err
 	}
 
-	existingQuantityInCart := 0
+	existingQuantityInCart := int32(0)
 	for _, item := range cart.Items {
 		if item.ProductID == productID {
 			existingQuantityInCart = item.Quantity
@@ -115,12 +148,13 @@ func (uc *CartUseCase) prepareAndValidateStock(
 		}
 	}
 
-	// Determine requested amount depending on action type
+	// 5. Compute structural checkout demands
 	totalQuantityRequested := inputQuantity
 	if !isAbsoluteUpdate {
 		totalQuantityRequested = existingQuantityInCart + inputQuantity
 	}
 
+	// 6. Cross-reference stock data using the fresh, typesafe network integers
 	if product.Stock < totalQuantityRequested {
 		return nil, nil, 0, &apperrors.BadRequestError{
 			Errors: map[string]string{"quantity": "insufficient stock"},
@@ -129,3 +163,42 @@ func (uc *CartUseCase) prepareAndValidateStock(
 
 	return cart, product, totalQuantityRequested, nil
 }
+
+// func (uc *CartUseCase) prepareAndValidateStock2(
+// 	ctx context.Context,
+// 	userID, productID int64,
+// 	inputQuantity int32,
+// 	isAbsoluteUpdate bool,
+// ) (*entity.Cart, *entity.Product, int32, error) {
+// 	product, err := uc.cartProductRepo.GetByID(ctx, productID)
+// 	if err != nil {
+// 		return nil, nil, 0, err
+// 	}
+
+// 	cart, err := uc.cartRepo.GetOrCreateCart(ctx, userID)
+// 	if err != nil {
+// 		return nil, nil, 0, err
+// 	}
+
+// 	existingQuantityInCart := int32(0)
+// 	for _, item := range cart.Items {
+// 		if item.ProductID == productID {
+// 			existingQuantityInCart = item.Quantity
+// 			break
+// 		}
+// 	}
+
+// 	// Determine requested amount depending on action type
+// 	totalQuantityRequested := inputQuantity
+// 	if !isAbsoluteUpdate {
+// 		totalQuantityRequested = existingQuantityInCart + inputQuantity
+// 	}
+
+// 	if product.Stock < totalQuantityRequested {
+// 		return nil, nil, 0, &apperrors.BadRequestError{
+// 			Errors: map[string]string{"quantity": "insufficient stock"},
+// 		}
+// 	}
+
+// 	return cart, product, totalQuantityRequested, nil
+// }

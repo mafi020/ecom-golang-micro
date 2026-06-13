@@ -11,17 +11,17 @@ type Cart struct {
 }
 
 // GetSubtotal calculates the combined monetary value of all items in the cart
-func (c *Cart) GetSubtotal() float64 {
-	var total float64
+func (c *Cart) GetSubtotal() int64 {
+	var total int64
 	for _, item := range c.Items {
-		total += item.Price * float64(item.Quantity)
+		total += (item.PriceCents) * int64(item.Quantity)
 	}
 	return total
 }
 
 // GetTotalItemCount calculates the sum of all individual product units
-func (c *Cart) GetTotalItemCount() int {
-	var count int
+func (c *Cart) GetTotalItemCount() int32 {
+	var count int32
 	for _, item := range c.Items {
 		count += item.Quantity
 	}

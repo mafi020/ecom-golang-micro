@@ -1,13 +1,13 @@
 root = "."
 testdata_dir = "testdata"
-tmp_dir = "bin"
+tmp_dir = "bin/gateway-state"
 
 [build]
   args_bin = []
-  bin = "./bin/api-gateway.exe"
-  cmd = "go build -o ./bin/api-gateway.exe ./cmd/api-gateway/main.go"
+  bin = "./bin/gateway-state/api-gateway.exe"
+  cmd = "go build -o ./bin/gateway-state/api-gateway.exe ./cmd/api-gateway/main.go"
   delay = 1000
-  exclude_dir = ["assets", "bin", "vendor", "cmd/monolith", "migrations"]
+  exclude_dir = ["assets", "bin", "vendor", "migrations"]
   exclude_file = []
   exclude_regex = ["_test.go"]
   exclude_unchanged = false
@@ -16,13 +16,12 @@ tmp_dir = "bin"
   include_dir = ["cmd/api-gateway", "internal/gateway", "config"]
   include_ext = ["go", "toml"]
   include_file = []
-  kill_delay = "0s"
-  log = "bin/build-gateway-errors.log"
-  poll = false
-  poll_interval = 0
+  kill_delay = "500ms"
+  log = "bin/gateway-state/build-errors.log"
+  poll = true
   rerun = false
   rerun_delay = 500
-  send_interrupt = false
+  send_interrupt = true
   stop_on_error = true
 
 [log]

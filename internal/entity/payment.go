@@ -31,14 +31,12 @@ const (
 
 // ── 1. THE MAIN LEDGER ENTRY ──────────────────────────────────────────────────
 type Payment struct {
-	ID      int64 `json:"id"`
-	OrderID int64 `json:"order_id"`
-	// PROVEN FIX: Internal universal transaction UUID moved here to the parent root.
-	// It is generated at checkout instantly for both COD and Online.
+	ID            int64         `json:"id"`
+	OrderID       int64         `json:"order_id"`
 	TransactionID string        `json:"transaction_id"`
 	Method        PaymentMethod `json:"method"`
 	Status        PaymentStatus `json:"status"`
-	Amount        float64       `json:"amount"`
+	Amount        int64         `json:"amount"`
 	CreatedAt     time.Time     `json:"created_at"`
 	UpdatedAt     time.Time     `json:"updated_at"`
 

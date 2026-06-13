@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mafi020/ecom-golang/internal/apperrors"
-	"github.com/mafi020/ecom-golang/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
 )
 
 type PostgresCartItemRepository struct {
@@ -20,15 +20,15 @@ func NewPostgresCartItemRepository(db *sql.DB) *PostgresCartItemRepository {
 
 func (r *PostgresCartItemRepository) AddItem(ctx context.Context, cartID int64, item *entity.CartItem) (*entity.CartItem, error) {
 	query := `
-		INSERT INTO cart_items (cart_id, product_id, quantity, price) 
+		INSERT INTO cart_items (cart_id, product_id, quantity, price_cents) 
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (cart_id, product_id) 
-		DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity, price = EXCLUDED.price
-		RETURNING id, cart_id, product_id, quantity, price
+		DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity, price_cents = EXCLUDED.price_cents
+		RETURNING id, cart_id, product_id, quantity, price_cents
 	`
 	var result entity.CartItem
-	err := r.db.QueryRowContext(ctx, query, cartID, item.ProductID, item.Quantity, item.Price).Scan(
-		&result.ID, &result.CartID, &result.ProductID, &result.Quantity, &result.Price,
+	err := r.db.QueryRowContext(ctx, query, cartID, item.ProductID, item.Quantity, item.PriceCents).Scan(
+		&result.ID, &result.CartID, &result.ProductID, &result.Quantity, &result.PriceCents,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add cart item: %w", err)
@@ -36,7 +36,7 @@ func (r *PostgresCartItemRepository) AddItem(ctx context.Context, cartID int64, 
 	return &result, nil
 }
 
-func (r *PostgresCartItemRepository) UpdateItemQuantity(ctx context.Context, cartID, productID int64, quantity int) (*entity.CartItem, error) {
+func (r *PostgresCartItemRepository) UpdateItemQuantity(ctx context.Context, cartID, productID int64, quantity int32) (*entity.CartItem, error) {
 	// If the user wants to reduce item quantity to 0, they must call RemoveItem.
 	if quantity <= 0 {
 		return nil, errors.New("quantity must be greater than zero; use RemoveItem to delete")
@@ -46,11 +46,11 @@ func (r *PostgresCartItemRepository) UpdateItemQuantity(ctx context.Context, car
 		UPDATE cart_items 
 		SET quantity = $1 
 		WHERE cart_id = $2 AND product_id = $3
-		RETURNING id, cart_id, product_id, quantity, price
+		RETURNING id, cart_id, product_id, quantity, price_cents
 	`
 	var item entity.CartItem
 	err := r.db.QueryRowContext(ctx, query, quantity, cartID, productID).Scan(
-		&item.ID, &item.CartID, &item.ProductID, &item.Quantity, &item.Price,
+		&item.ID, &item.CartID, &item.ProductID, &item.Quantity, &item.PriceCents,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, &apperrors.NotFoundError{Resource: "cart item"}

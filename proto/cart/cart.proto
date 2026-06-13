@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package cart;
+
+// Points code generation directly to your rpc workspace structure
+option go_package = "github.com/mafi020/ecom-golang-micro/proto/cart;cartpb";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+service CartService {
+  // GetCart fetches a user's active shopping cart with all sub-items populated
+  rpc GetCart (GetCartRequest) returns (GetCartResponse);
+
+  // AddItem inserts or updates a product configuration line inside a target cart
+  rpc AddItem (AddItemRequest) returns (CartResponse);
+
+  // UpdateItemQuantity modifies the absolute unit count of a targeted product line
+  rpc UpdateItemQuantity (UpdateItemQuantityRequest) returns (CartResponse);
+
+  // RemoveItem purges a specific product row out of a target shopping cart
+  rpc RemoveItem (RemoveItemRequest) returns (CartResponse);
+
+  // ClearCart flushes all sub-items inside a target cart (Saga checkout completion hook)
+  rpc ClearCart (ClearCartRequest) returns (google.protobuf.Empty);
+}
+
+message CartItem {
+  int64 id = 1;
+  int64 cart_id = 2;
+  int64 product_id = 3;
+  int32 quantity = 4; // Perfect typesafe int32 mapping match
+  int64 price_cents = 5; // Standardized int64 subunit pricing logic
+}
+
+message Cart {
+  int64 id = 1;
+  int64 user_id = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  repeated CartItem items = 5; // Maps cleanly to your Go []CartItem slice
+
+  // Computed Context Fields (Mirrors your Go domain helper method behaviors)
+  int64 subtotal_cents = 6;
+  int32 total_item_count = 7;
+}
+
+// --- Request / Response Payloads ---
+
+message GetCartRequest {
+  int64 user_id = 1;
+}
+
+message GetCartResponse {
+  Cart cart = 1;
+}
+
+message AddItemRequest {
+  int64 user_id = 1;
+  int64 product_id = 2;
+  int32 quantity = 3;
+  int64 price_cents = 4;
+}
+
+message UpdateItemQuantityRequest {
+  int64 user_id = 1;
+  int64 product_id = 2;
+  int32 quantity = 3;
+}
+
+message RemoveItemRequest {
+  int64 user_id = 1;
+  int64 product_id = 2;
+}
+
+message ClearCartRequest {
+  int64 cart_id = 1;
+}
+
+message CartResponse {
+  Cart cart = 1;
+}

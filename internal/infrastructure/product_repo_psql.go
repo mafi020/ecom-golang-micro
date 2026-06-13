@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mafi020/ecom-golang/internal/apperrors"
-	"github.com/mafi020/ecom-golang/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
 )
 
 type PostgresProductRepository struct {
@@ -22,19 +22,19 @@ func NewPostgresProductRepository(db *sql.DB) *PostgresProductRepository {
 
 func (r *PostgresProductRepository) Create(ctx context.Context, product *entity.Product) error {
 	query := `
-		INSERT INTO products (name, description, price, stock, category_id, created_at, updated_at)		
+		INSERT INTO products (name, description, price_cents, stock, category_id, created_at, updated_at)		
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, name, description, price, stock, category_id, created_at, updated_at
+		RETURNING id, name, description, price_cents, stock, category_id, created_at, updated_at
 	`
 	err := r.db.QueryRowContext(ctx, query,
 		product.Name,
 		product.Description,
-		product.Price,
+		product.PriceCents,
 		product.Stock,
 		product.CategoryID,
 		time.Now(),
 		time.Now(),
-	).Scan(&product.ID, &product.Name, &product.Description, &product.Price, &product.Stock, &product.CategoryID, &product.CreatedAt, &product.UpdatedAt)
+	).Scan(&product.ID, &product.Name, &product.Description, &product.PriceCents, &product.Stock, &product.CategoryID, &product.CreatedAt, &product.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -70,10 +70,10 @@ func (r *PostgresProductRepository) List(ctx context.Context, params entity.GetP
 
 	// 5. Sorting Safety (Whitelisting columns)
 	allowedSortColumns := map[string]bool{
-		"created_at": true,
-		"name":       true,
-		"price":      true,
-		"stock":      true,
+		"created_at":  true,
+		"name":        true,
+		"price_cents": true,
+		"stock":       true,
 	}
 
 	if !allowedSortColumns[params.SortBy] {
@@ -85,7 +85,7 @@ func (r *PostgresProductRepository) List(ctx context.Context, params entity.GetP
 
 	// 6. Main query with pagination
 	mainQuery := fmt.Sprintf(
-		"SELECT id, name, description, price, stock, category_id, created_at, updated_at %s ORDER BY %s %s LIMIT $%d OFFSET $%d",
+		"SELECT id, name, description, price_cents, stock, category_id, created_at, updated_at %s ORDER BY %s %s LIMIT $%d OFFSET $%d",
 		baseQuery, params.SortBy, params.SortOrder, argIndex, argIndex+1,
 	)
 
@@ -105,7 +105,7 @@ func (r *PostgresProductRepository) List(ctx context.Context, params entity.GetP
 			&p.ID,
 			&p.Name,
 			&desc,
-			&p.Price,
+			&p.PriceCents,
 			&p.Stock,
 			&p.CategoryID,
 			&p.CreatedAt,
@@ -127,7 +127,7 @@ func (r *PostgresProductRepository) List(ctx context.Context, params entity.GetP
 
 func (r *PostgresProductRepository) GetByID(ctx context.Context, id int64) (*entity.Product, error) {
 	query := `
-		SELECT id, name, description, price, stock, category_id, created_at, updated_at	
+		SELECT id, name, description, price_cents, stock, category_id, created_at, updated_at	
 		FROM products
 		WHERE id = $1
 	`
@@ -139,7 +139,7 @@ func (r *PostgresProductRepository) GetByID(ctx context.Context, id int64) (*ent
 		&product.ID,
 		&product.Name,
 		&product.Description,
-		&product.Price,
+		&product.PriceCents,
 		&product.Stock,
 		&product.CategoryID,
 		&product.CreatedAt,
@@ -163,12 +163,12 @@ func (r *PostgresProductRepository) Update(ctx context.Context, id int64, input 
 	SET
 		name        = COALESCE($1, name),
 		description = COALESCE($2, description),
-		price       = COALESCE($3, price),
+		price_cents       = COALESCE($3, price_cents),
 		stock       = COALESCE($4, stock),
 		category_id = COALESCE($5, category_id),
 		updated_at  = NOW()
 	WHERE id = $6
-	RETURNING id, name, description, price, stock, category_id, created_at, updated_at
+	RETURNING id, name, description, price_cents, stock, category_id, created_at, updated_at
 	`
 	product := &entity.Product{}
 	err := r.db.QueryRowContext(
@@ -176,7 +176,7 @@ func (r *PostgresProductRepository) Update(ctx context.Context, id int64, input 
 		query,
 		input.Name,
 		input.Description,
-		input.Price,
+		input.PriceCents,
 		input.Stock,
 		input.CategoryID,
 		id,
@@ -184,7 +184,7 @@ func (r *PostgresProductRepository) Update(ctx context.Context, id int64, input 
 		&product.ID,
 		&product.Name,
 		&product.Description,
-		&product.Price,
+		&product.PriceCents,
 		&product.Stock,
 		&product.CategoryID,
 		&product.CreatedAt,
@@ -226,12 +226,12 @@ func (r *PostgresProductRepository) BatchUpdate(ctx context.Context, updates map
 
 		nameCases = append(nameCases, fmt.Sprintf("WHEN id = %s THEN COALESCE($%d, name)", idPlaceholder, argIdx+1))
 		descCases = append(descCases, fmt.Sprintf("WHEN id = %s THEN COALESCE($%d, description)", idPlaceholder, argIdx+2))
-		priceCases = append(priceCases, fmt.Sprintf("WHEN id = %s THEN COALESCE($%d, price)", idPlaceholder, argIdx+3))
+		priceCases = append(priceCases, fmt.Sprintf("WHEN id = %s THEN COALESCE($%d, price_cents)", idPlaceholder, argIdx+3))
 		stockCases = append(stockCases, fmt.Sprintf("WHEN id = %s THEN COALESCE($%d, stock)", idPlaceholder, argIdx+4))
 		categoryCases = append(categoryCases, fmt.Sprintf("WHEN id = %s THEN COALESCE($%d, category_id)", idPlaceholder, argIdx+5))
 		inClause = append(inClause, idPlaceholder)
 
-		args = append(args, id, input.Name, input.Description, input.Price, input.Stock, input.CategoryID)
+		args = append(args, id, input.Name, input.Description, input.PriceCents, input.Stock, input.CategoryID)
 		argIdx += 6
 	}
 
@@ -240,12 +240,12 @@ func (r *PostgresProductRepository) BatchUpdate(ctx context.Context, updates map
 		SET
 			name        = CASE %s ELSE name        END,
 			description = CASE %s ELSE description END,
-			price       = CASE %s ELSE price       END,
+			price_cents       = CASE %s ELSE price_cents       END,
 			stock       = CASE %s ELSE stock       END,
 			category_id = CASE %s ELSE category_id END,
 			updated_at  = NOW()
 		WHERE id IN (%s)
-		RETURNING id, name, description, price, stock, category_id, created_at, updated_at
+		RETURNING id, name, description, price_cents, stock, category_id, created_at, updated_at
 	`,
 		strings.Join(nameCases, " "),
 		strings.Join(descCases, " "),
@@ -270,7 +270,7 @@ func (r *PostgresProductRepository) BatchUpdate(ctx context.Context, updates map
 			&p.ID,
 			&p.Name,
 			&desc,
-			&p.Price,
+			&p.PriceCents,
 			&p.Stock,
 			&p.CategoryID,
 			&p.CreatedAt,
@@ -326,7 +326,7 @@ func (r *PostgresProductRepository) GetByIDs(ctx context.Context, ids []int64) (
 	}
 
 	query := fmt.Sprintf(`
-		SELECT id, name, description, price, stock, category_id, created_at, updated_at
+		SELECT id, name, description, price_cents, stock, category_id, created_at, updated_at
 		FROM products
 		WHERE id IN (%s)
 	`, strings.Join(placeholders, ", "))
@@ -345,7 +345,7 @@ func (r *PostgresProductRepository) GetByIDs(ctx context.Context, ids []int64) (
 			&p.ID,
 			&p.Name,
 			&desc,
-			&p.Price,
+			&p.PriceCents,
 			&p.Stock,
 			&p.CategoryID,
 			&p.CreatedAt,

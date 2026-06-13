@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mafi020/ecom-golang/internal/apperrors"
-	"github.com/mafi020/ecom-golang/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
 )
 
 type PostgresCartRepository struct {
@@ -41,7 +41,7 @@ func (r *PostgresCartRepository) GetOrCreateCart(ctx context.Context, userID int
 func (r *PostgresCartRepository) GetCartByUserID(ctx context.Context, userID int64) (*entity.Cart, error) {
 	query := `
 		SELECT c.id, c.user_id, c.created_at, c.updated_at,
-			   ci.id, ci.cart_id, ci.product_id, ci.quantity, ci.price
+			   ci.id, ci.cart_id, ci.product_id, ci.quantity, ci.price_cents
 		FROM carts c
 		LEFT JOIN cart_items ci ON ci.cart_id = c.id
 		WHERE c.user_id = $1
@@ -57,11 +57,11 @@ func (r *PostgresCartRepository) GetCartByUserID(ctx context.Context, userID int
 
 	for rows.Next() {
 		var (
-			itemID    sql.NullInt64
-			cartID    sql.NullInt64
-			productID sql.NullInt64
-			quantity  sql.NullInt32
-			price     sql.NullFloat64
+			itemID      sql.NullInt64
+			cartID      sql.NullInt64
+			productID   sql.NullInt64
+			quantity    sql.NullInt32
+			price_cents sql.NullInt64
 		)
 
 		if cart == nil {
@@ -70,7 +70,7 @@ func (r *PostgresCartRepository) GetCartByUserID(ctx context.Context, userID int
 
 		err := rows.Scan(
 			&cart.ID, &cart.UserID, &cart.CreatedAt, &cart.UpdatedAt,
-			&itemID, &cartID, &productID, &quantity, &price,
+			&itemID, &cartID, &productID, &quantity, &price_cents,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan cart: %w", err)
@@ -78,11 +78,11 @@ func (r *PostgresCartRepository) GetCartByUserID(ctx context.Context, userID int
 
 		if itemID.Valid {
 			cart.Items = append(cart.Items, entity.CartItem{
-				ID:        itemID.Int64,
-				CartID:    cartID.Int64,
-				ProductID: productID.Int64,
-				Quantity:  int(quantity.Int32),
-				Price:     price.Float64,
+				ID:         itemID.Int64,
+				CartID:     cartID.Int64,
+				ProductID:  productID.Int64,
+				Quantity:   quantity.Int32,
+				PriceCents: price_cents.Int64,
 			})
 		}
 	}

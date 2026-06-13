@@ -3,7 +3,7 @@ package entity
 import (
 	"time"
 
-	"github.com/mafi020/ecom-golang/internal/utils"
+	"github.com/mafi020/ecom-golang-micro/internal/utils"
 )
 
 type Role string

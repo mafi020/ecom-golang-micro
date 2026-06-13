@@ -5,17 +5,17 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mafi020/ecom-golang/internal/apperrors"
-	"github.com/mafi020/ecom-golang/internal/delivery/http/request"
-	"github.com/mafi020/ecom-golang/internal/delivery/http/utils"
-	"github.com/mafi020/ecom-golang/internal/entity"
-	"github.com/mafi020/ecom-golang/internal/response"
+	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
+	"github.com/mafi020/ecom-golang-micro/internal/delivery/http/request"
+	"github.com/mafi020/ecom-golang-micro/internal/delivery/http/utils"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/response"
 )
 
 type cartUsecase interface {
 	GetCart(ctx context.Context, userID int64) (*entity.Cart, error)
-	AddItem(ctx context.Context, userID, productID int64, quantity int) (*entity.Cart, error)
-	UpdateItem(ctx context.Context, userID, productID int64, quantity int) (*entity.Cart, error)
+	AddItem(ctx context.Context, userID, productID int64, quantity int32) (*entity.Cart, error)
+	UpdateItem(ctx context.Context, userID, productID int64, quantity int32) (*entity.Cart, error)
 	RemoveItem(ctx context.Context, userID, productID int64) (*entity.Cart, error)
 	ClearCart(ctx context.Context, userID int64) error
 }
@@ -67,7 +67,7 @@ func (h *CartHandler) UpdateItem(c *gin.Context) {
 	}
 
 	var req struct {
-		Quantity int `json:"quantity" binding:"required,gt=0"`
+		Quantity int32 `json:"quantity" binding:"required,gt=0"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {

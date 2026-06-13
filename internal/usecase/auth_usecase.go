@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/mafi020/ecom-golang/config"
-	"github.com/mafi020/ecom-golang/internal/entity"
-	"github.com/mafi020/ecom-golang/internal/utils"
+	"github.com/mafi020/ecom-golang-micro/config"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/utils"
 )
 
 type authUserInterface interface {

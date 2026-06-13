@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mafi020/ecom-golang/internal/apperrors"
-	"github.com/mafi020/ecom-golang/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
 )
 
 type PostgresRefreshTokenRepository struct {

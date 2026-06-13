@@ -1,0 +1,36 @@
+
+
+
+
+syntax = "proto3";
+
+package identity;
+option go_package = "github.com/mafi020/ecom-golang-micro/proto/identity;identitypb";
+
+import "google/protobuf/timestamp.proto";
+
+enum UserRole {
+  USER_ROLE_UNSPECIFIED = 0;
+  USER_ROLE_ADMIN = 1;
+  USER_ROLE_CUSTOMER = 2;
+}
+
+message User {
+  int64 id = 1;
+  string name = 2;
+  string email = 3;
+  string role = 4;
+}
+
+message GetUserRequest {
+  int64 id = 1;
+}
+
+message GetUserResponse {
+  User user = 1;
+}
+
+service IdentityService {
+  // The ONLY method your internal mesh cluster network cares about!
+  rpc GetUserByID (GetUserRequest) returns (GetUserResponse);
+}

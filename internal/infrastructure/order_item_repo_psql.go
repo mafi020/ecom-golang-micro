@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/mafi020/ecom-golang/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
 )
 
 type PostgresOrderItemRepository struct {
@@ -20,9 +20,9 @@ func (r *PostgresOrderItemRepository) CreateOrderItems(ctx context.Context, orde
 	db := GetExecutor(ctx, r.db)
 
 	query := `
-        INSERT INTO order_items (order_id, product_id, quantity, price, created_at, updated_at)
+        INSERT INTO order_items (order_id, product_id, quantity, price_cents, created_at, updated_at)
         VALUES ($1, $2, $3, $4, NOW(), NOW())
-        RETURNING id, order_id, product_id, quantity, price, created_at, updated_at
+        RETURNING id, order_id, product_id, quantity, price_cents, created_at, updated_at
     `
 
 	for i := range items {
@@ -32,13 +32,13 @@ func (r *PostgresOrderItemRepository) CreateOrderItems(ctx context.Context, orde
 			orderID,
 			items[i].ProductID,
 			items[i].Quantity,
-			items[i].Price,
+			items[i].PriceCents,
 		).Scan(
 			&items[i].ID,
 			&items[i].OrderID,
 			&items[i].ProductID,
 			&items[i].Quantity,
-			&items[i].Price,
+			&items[i].PriceCents,
 			&items[i].CreatedAt,
 			&items[i].UpdatedAt,
 		)
@@ -52,7 +52,7 @@ func (r *PostgresOrderItemRepository) CreateOrderItems(ctx context.Context, orde
 
 func (r *PostgresOrderItemRepository) GetOrderItemsByOrderID(ctx context.Context, orderID int64) ([]entity.OrderItem, error) {
 	query := `
-		SELECT id, order_id, product_id, quantity, price, created_at, updated_at
+		SELECT id, order_id, product_id, quantity, price_cents, created_at, updated_at
 		FROM order_items
 		WHERE order_id = $1
 	`
@@ -69,7 +69,7 @@ func (r *PostgresOrderItemRepository) GetOrderItemsByOrderID(ctx context.Context
 			&item.OrderID,
 			&item.ProductID,
 			&item.Quantity,
-			&item.Price,
+			&item.PriceCents,
 			&item.CreatedAt,
 			&item.UpdatedAt,
 		)

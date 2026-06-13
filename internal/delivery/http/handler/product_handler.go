@@ -1,13 +1,15 @@
 package handler
 
 import (
+	"log"
+
 	"github.com/gin-gonic/gin"
-	"github.com/mafi020/ecom-golang/internal/apperrors"
-	"github.com/mafi020/ecom-golang/internal/delivery/http/request"
-	"github.com/mafi020/ecom-golang/internal/delivery/http/utils"
-	"github.com/mafi020/ecom-golang/internal/entity"
-	"github.com/mafi020/ecom-golang/internal/response"
-	"github.com/mafi020/ecom-golang/internal/usecase"
+	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
+	"github.com/mafi020/ecom-golang-micro/internal/delivery/http/request"
+	"github.com/mafi020/ecom-golang-micro/internal/delivery/http/utils"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/response"
+	"github.com/mafi020/ecom-golang-micro/internal/usecase"
 )
 
 type ProductHandler struct {
@@ -26,7 +28,7 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 		return
 	}
 
-	product := entity.NewProduct(req.Name, req.Description, req.Price, req.Stock, req.CategoryID)
+	product := entity.NewProduct(req.Name, req.Description, req.PriceCents, req.Stock, req.CategoryID)
 
 	if err := h.productUsecase.Create(c.Request.Context(), product); err != nil {
 		utils.HandleError(c, err)
@@ -46,6 +48,7 @@ func (h *ProductHandler) GetProductByID(c *gin.Context) {
 	product, err := h.productUsecase.GetByID(c.Request.Context(), id)
 
 	if err != nil {
+		log.Printf("Server Error: %v", err)
 		utils.HandleError(c, err)
 		return
 	}
@@ -120,7 +123,7 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 	product, err := h.productUsecase.Update(c.Request.Context(), id, &entity.UpdateProductInput{
 		Name:        req.Name,
 		Description: req.Description,
-		Price:       req.Price,
+		PriceCents:  req.PriceCents,
 		Stock:       req.Stock,
 		CategoryID:  req.CategoryID,
 	})

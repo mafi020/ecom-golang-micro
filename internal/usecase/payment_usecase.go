@@ -2,13 +2,13 @@ package usecase
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/mafi020/ecom-golang/internal/apperrors"
-	"github.com/mafi020/ecom-golang/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
+	orderpb "github.com/mafi020/ecom-golang-micro/proto/order"
 )
 
 type paymentRepo interface {
@@ -20,34 +20,25 @@ type paymentRepo interface {
 	UpdateCODDetail(ctx context.Context, paymentID int64, detail *entity.CODDetail) (*entity.CODDetail, error)
 }
 
-type paymentOrderRepo interface {
-	GetOrderByID(ctx context.Context, id, userID int64) (*entity.Order, error)
-	UpdateStatus(ctx context.Context, id int64, status entity.OrderStatus) error
-}
-
 type tm interface {
 	WithinTransaction(context.Context, func(context.Context) error) error
 }
 
 type PaymentUseCase struct {
 	paymentRepo paymentRepo
-	orderRepo   paymentOrderRepo
+	orderClient orderpb.OrderServiceClient
 	tm          tm
 }
 
-func NewPaymentUseCase(paymentRepo paymentRepo, orderRepo paymentOrderRepo, tm tm) *PaymentUseCase {
-	return &PaymentUseCase{paymentRepo: paymentRepo, orderRepo: orderRepo, tm: tm}
+func NewPaymentUseCase(paymentRepo paymentRepo, orderClient orderpb.OrderServiceClient, tm tm) *PaymentUseCase {
+	return &PaymentUseCase{
+		paymentRepo: paymentRepo,
+		orderClient: orderClient,
+		tm:          tm,
+	}
 }
 
 // ── Online Payment ────────────────────────────────────────────────────────────
-
-type OnlinePaymentInput struct {
-	OrderID       int64
-	Provider      entity.PaymentProvider
-	GatewayRef    string
-	GatewayStatus string
-	RawResponse   json.RawMessage
-}
 
 func (uc *PaymentUseCase) PayOnline(
 	ctx context.Context,
@@ -58,34 +49,38 @@ func (uc *PaymentUseCase) PayOnline(
 	gatewayStatus string,
 	rawResponse []byte,
 ) (*entity.Payment, error) {
-	order, err := uc.orderRepo.GetOrderByID(ctx, orderID, userID)
+	// 1. Fetch Order over network via gRPC instead of local DB query
+	orderResp, err := uc.orderClient.GetOrder(ctx, &orderpb.GetOrderRequest{
+		Id:     orderID,
+		UserId: userID,
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch order via grpc: %w", err)
 	}
 
-	if order.Status != entity.OrderStatusPending {
+	orderProto := orderResp.GetOrder()
+	if orderProto.GetStatus().String() != string(entity.OrderStatusPending) {
 		return nil, &apperrors.ValidationError{Errors: map[string]string{
-			"status": fmt.Sprintf("order must be pending for online payment, current: %s", order.Status),
+			"status": fmt.Sprintf("order must be pending for online payment, current: %s", orderProto.GetStatus()),
 		}}
 	}
 
 	var payment *entity.Payment
 
+	// 2. Perform local payment operations inside a local atomic transaction
 	err = uc.tm.WithinTransaction(ctx, func(txCtx context.Context) error {
-		// 1. Create payment record (Generate universal internal tracking ID directly on root)
 		txUUID := uuid.New().String()
 		payment, err = uc.paymentRepo.Create(txCtx, &entity.Payment{
-			OrderID:       order.ID,
+			OrderID:       orderProto.GetId(),
 			TransactionID: txUUID,
 			Method:        entity.PaymentMethodOnline,
-			Status:        entity.PaymentStatusCompleted, // Direct instantiation as completed
-			Amount:        order.TotalPrice,
+			Status:        entity.PaymentStatusCompleted,
+			Amount:        orderProto.GetTotalPrice(), // Uses gRPC response price field
 		})
 		if err != nil {
 			return err
 		}
 
-		// 2. Create online gateway specific tracking transaction info
 		onlineTx, err := uc.paymentRepo.CreateOnlineTransaction(txCtx, &entity.OnlineTransaction{
 			PaymentID:     payment.ID,
 			Provider:      provider,
@@ -97,45 +92,60 @@ func (uc *PaymentUseCase) PayOnline(
 			return err
 		}
 		payment.OnlineTransaction = onlineTx
-
-		// 3. Update parent order fulfillment status
-		return uc.orderRepo.UpdateStatus(txCtx, order.ID, entity.OrderStatusPaid)
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
-	return payment, err
+	// 3. Update Order fulfillment state over the network via gRPC
+	_, err = uc.orderClient.UpdateStatus(ctx, &orderpb.UpdateStatusRequest{
+		OrderId: orderProto.GetId(),
+		Status:  orderpb.OrderStatus_ORDER_STATUS_PAID,
+	})
+	if err != nil {
+		// In production microservices, if this network call fails after payment succeeds,
+		// you would ideally trigger a compensatory action, queue an outbox message, or return an error.
+		return payment, fmt.Errorf("payment succeeded but failing to update order status: %w", err)
+	}
+
+	return payment, nil
 }
 
 // ── COD Payment ───────────────────────────────────────────────────────────────
 
 func (uc *PaymentUseCase) PayCOD(ctx context.Context, userID, orderID int64) (*entity.Payment, error) {
-	order, err := uc.orderRepo.GetOrderByID(ctx, orderID, userID)
+	// Fetch Order details over network via gRPC
+	orderResp, err := uc.orderClient.GetOrder(ctx, &orderpb.GetOrderRequest{
+		Id:     orderID,
+		UserId: userID,
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch order via grpc: %w", err)
 	}
 
-	if order.Status != entity.OrderStatusPending {
+	orderProto := orderResp.GetOrder()
+	if orderProto.GetStatus().String() != string(entity.OrderStatusPending) {
 		return nil, &apperrors.ValidationError{Errors: map[string]string{
-			"status": fmt.Sprintf("order must be pending for COD, current: %s", order.Status),
+			"status": fmt.Sprintf("order must be pending for COD, current: %s", orderProto.GetStatus()),
 		}}
 	}
 
 	var payment *entity.Payment
 
 	err = uc.tm.WithinTransaction(ctx, func(txCtx context.Context) error {
-		// 1. Create payment ledger entry (Stays pending until delivery collection)
 		txUUID := uuid.New().String()
 		payment, err = uc.paymentRepo.Create(txCtx, &entity.Payment{
-			OrderID:       order.ID,
+			OrderID:       orderProto.GetId(),
 			TransactionID: txUUID,
 			Method:        entity.PaymentMethodCOD,
 			Status:        entity.PaymentStatusPending,
-			Amount:        order.TotalPrice,
+			Amount:        orderProto.GetTotalPrice(),
 		})
 		if err != nil {
 			return err
 		}
 
-		// 2. Create matching empty cash-ledger detail row
 		codDetail, err := uc.paymentRepo.CreateCODDetail(txCtx, &entity.CODDetail{
 			PaymentID: payment.ID,
 		})
@@ -143,7 +153,6 @@ func (uc *PaymentUseCase) PayCOD(ctx context.Context, userID, orderID int64) (*e
 			return err
 		}
 		payment.CODDetail = codDetail
-
 		return nil
 	})
 
@@ -173,7 +182,6 @@ func (uc *PaymentUseCase) CollectCOD(ctx context.Context, orderID int64) (*entit
 	now := time.Now()
 
 	err = uc.tm.WithinTransaction(ctx, func(txCtx context.Context) error {
-		// 1. Mark financial ledger row as reconciled (money in hand)
 		codDetail, err := uc.paymentRepo.UpdateCODDetail(txCtx, payment.ID, &entity.CODDetail{
 			CollectedAt: &now,
 		})
@@ -182,23 +190,36 @@ func (uc *PaymentUseCase) CollectCOD(ctx context.Context, orderID int64) (*entit
 		}
 		payment.CODDetail = codDetail
 
-		// 2. Complete payment status
 		if err := uc.paymentRepo.UpdateStatus(txCtx, payment.ID, entity.PaymentStatusCompleted); err != nil {
 			return err
 		}
 		payment.Status = entity.PaymentStatusCompleted
-
-		// 3. Chronologically progress order state machine (shipped -> delivered)
-		return uc.orderRepo.UpdateStatus(txCtx, orderID, entity.OrderStatusDelivered)
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
-	return payment, err
+	// Progress order state machine remotely (shipped -> delivered)
+	_, err = uc.orderClient.UpdateStatus(ctx, &orderpb.UpdateStatusRequest{
+		OrderId: orderID,
+		Status:  orderpb.OrderStatus_ORDER_STATUS_PAID,
+	})
+	if err != nil {
+		return payment, fmt.Errorf("reconciliation completed but failing to transition order state: %w", err)
+	}
+
+	return payment, nil
 }
 
 func (uc *PaymentUseCase) GetPaymentByOrderID(ctx context.Context, orderID, userID int64) (*entity.Payment, error) {
-	_, err := uc.orderRepo.GetOrderByID(ctx, orderID, userID)
+	// Authenticate order validation check via gRPC network layer boundary
+	_, err := uc.orderClient.GetOrder(ctx, &orderpb.GetOrderRequest{
+		Id:     orderID,
+		UserId: userID,
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("authorization check failed: order service unresolvable: %w", err)
 	}
 
 	return uc.paymentRepo.GetPaymentByOrderID(ctx, orderID)

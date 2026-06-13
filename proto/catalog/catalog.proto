@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package catalog;
+
+// Simplifies the Go import path to point directly to the rpc folder
+option go_package = "github.com/mafi020/ecom-golang-micro/proto/catalog;catalogpb";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+service CatalogService {
+  rpc GetProduct (GetProductRequest) returns (GetProductResponse);
+  rpc BatchGetProducts (BatchGetProductsRequest) returns (BatchGetProductsResponse);
+  rpc BatchUpdateProducts (BatchUpdateProductsRequest) returns (google.protobuf.Empty);
+}
+
+message Category {
+  int64 id = 1;
+  string name = 2;
+  string slug = 3;
+  optional int64 parent_id = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  repeated Product products = 7;
+}
+
+message Product {
+  int64 id = 1;
+  string name = 2;
+  optional string description = 3;
+  int64 price_cents = 4; 
+  int32 stock = 5;
+  int64 category_id = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+
+  // Represents the *Category struct relationship
+  optional Category category = 9;
+}
+
+message GetProductRequest {
+  int64 id = 1;
+}
+
+message GetProductResponse {
+  Product product = 1;
+}
+
+message BatchGetProductsRequest {
+  repeated int64 ids = 1;
+}
+
+message BatchGetProductsResponse {
+  repeated Product products = 1;
+}
+
+message BatchUpdateProductsRequest {
+  map<int64, UpdateProductPayload> updates = 1;
+}
+
+message UpdateProductPayload {
+  optional string name = 1;
+  optional string description = 2;
+  optional int64 price_cents = 3;
+  optional int32 stock = 4;
+}
+

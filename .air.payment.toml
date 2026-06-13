@@ -1,0 +1,43 @@
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "bin/payment-state"
+
+[build]
+  args_bin = []
+  bin = "./bin/payment-state/payment-service.exe"
+  cmd = "go build -o ./bin/payment-state/payment-service.exe ./cmd/payment-service/main.go"
+  delay = 1000
+  exclude_dir = ["assets", "bin", "vendor", "cmd/api-gateway", "internal/gateway"]
+  exclude_file = []
+  exclude_regex = ["_test.go"]
+  exclude_unchanged = false
+  follow_symlink = false
+  full_bin = ""
+  include_dir = ["cmd/payment-service", "internal", "config", "migrations"]
+  include_ext = ["go", "sql", "toml"]
+  include_file = []
+  kill_delay = "500ms"
+  log = "bin/payment-state/build-errors.log"
+  poll = true
+  rerun = false
+  rerun_delay = 500
+  send_interrupt = true
+  stop_on_error = true
+
+[log]
+  main_only = false
+  time = false
+
+[color]
+  app = ""
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[misc]
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = false
+  keep_scroll = true

@@ -3,15 +3,15 @@ package entity
 import (
 	"time"
 
-	"github.com/mafi020/ecom-golang/internal/utils"
+	"github.com/mafi020/ecom-golang-micro/internal/utils"
 )
 
 type Product struct {
 	ID          int64     `json:"id"`
 	Name        string    `json:"name"`
 	Description *string   `json:"description,omitempty"`
-	Price       float64   `json:"price"`
-	Stock       int       `json:"stock"`
+	PriceCents  int64     `json:"price_cents"`
+	Stock       int32     `json:"stock"`
 	CategoryID  int64     `json:"category_id"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -20,11 +20,11 @@ type Product struct {
 	Category *Category `json:"category,omitempty"`
 }
 
-func NewProduct(name string, description *string, price float64, stock int, categoryID int64) *Product {
+func NewProduct(name string, description *string, price_cents int64, stock int32, categoryID int64) *Product {
 	return &Product{
 		Name:        name,
 		Description: description,
-		Price:       price,
+		PriceCents:  price_cents,
 		Stock:       stock,
 		CategoryID:  categoryID,
 	}
@@ -33,8 +33,8 @@ func NewProduct(name string, description *string, price float64, stock int, cate
 type UpdateProductInput struct {
 	Name        *string
 	Description *string
-	Price       *float64
-	Stock       *int
+	PriceCents  *int64
+	Stock       *int32
 	CategoryID  *int64
 }
 

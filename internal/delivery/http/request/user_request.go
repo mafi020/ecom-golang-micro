@@ -1,6 +1,6 @@
 package request
 
-import "github.com/mafi020/ecom-golang/internal/utils"
+import "github.com/mafi020/ecom-golang-micro/internal/utils"
 
 type GetUsersRequest struct {
 	utils.QueryParams

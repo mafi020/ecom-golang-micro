@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/mafi020/ecom-golang/internal/apperrors"
-	"github.com/mafi020/ecom-golang/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
 )
 
 type PostgresPaymentRepository struct {
@@ -150,7 +150,7 @@ func (r *PostgresPaymentRepository) GetPaymentByOrderID(ctx context.Context, ord
 		txUUID        string
 		paymentMethod string
 		paymentStatus string
-		paymentAmount float64
+		paymentAmount int64
 		paymentCA     sql.NullTime
 		paymentUA     sql.NullTime
 

@@ -4,13 +4,14 @@ import (
 	"slices"
 	"time"
 
-	"github.com/mafi020/ecom-golang/internal/utils"
+	"github.com/mafi020/ecom-golang-micro/internal/utils"
 )
 
 type OrderStatus string
 
 const (
 	OrderStatusPending   OrderStatus = "pending"
+	OrderStatusConfirmed OrderStatus = "confirmed"
 	OrderStatusPaid      OrderStatus = "paid"
 	OrderStatusShipped   OrderStatus = "shipped"
 	OrderStatusDelivered OrderStatus = "delivered"
@@ -18,12 +19,20 @@ const (
 	OrderStatusCancelled OrderStatus = "cancelled"
 )
 
-// Updated matrix to enforce strictly forward chronological transitions
+// Updated matrix to support Saga orchestrations and forward-only chronological states
 var validTransitions = map[OrderStatus][]OrderStatus{
-	OrderStatusPending:   {OrderStatusPaid, OrderStatusShipped, OrderStatusCancelled},
-	OrderStatusPaid:      {OrderStatusShipped, OrderStatusCancelled},
-	OrderStatusShipped:   {OrderStatusDelivered, OrderStatusCancelled}, // FIXED: Removed backward transitions
-	OrderStatusDelivered: {OrderStatusCompleted},                       // FIXED: Removed backward transitions
+	// Pending can advance to Confirmed (grpc success) or drop directly to Cancelled (grpc failure)
+	OrderStatusPending: {OrderStatusConfirmed, OrderStatusCancelled},
+
+	// Once stock is locked, the order can be paid for, or cancelled by the user/admin
+	OrderStatusConfirmed: {OrderStatusPaid, OrderStatusCancelled},
+
+	// Once paid, it progresses down the fulfillment line, or enters a cancellation/refund loop
+	OrderStatusPaid: {OrderStatusShipped, OrderStatusCancelled},
+
+	// Post-shipping routes run cleanly forward to delivery and completion boundaries
+	OrderStatusShipped:   {OrderStatusDelivered, OrderStatusCancelled},
+	OrderStatusDelivered: {OrderStatusCompleted},
 	OrderStatusCompleted: {},
 	OrderStatusCancelled: {},
 }
@@ -40,7 +49,7 @@ type Order struct {
 	ID         int64       `json:"id"`
 	UserID     int64       `json:"user_id"`
 	Status     OrderStatus `json:"status" default:"pending"`
-	TotalPrice float64     `json:"total_price"`
+	TotalPrice int64       `json:"total_price"`
 
 	// PROVEN FIX: Logistics details live safely here inside the Order domain
 	CourierPartner *string    `json:"courier_partner,omitempty"`

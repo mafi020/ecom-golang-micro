@@ -2,61 +2,53 @@ package router
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/mafi020/ecom-golang/internal/gateway/delivery/http/handler"
+	"github.com/mafi020/ecom-golang-micro/internal/gateway/delivery/http/handler"
 )
 
 // MapProtectedRoutes attaches endpoints that require a valid signature header
-func MapProtectedRoutes(api *gin.RouterGroup, monolith *handler.ProxyHandler) {
-	api.POST("/auth/logout", monolith.ProxyRequest())
+func MapProtectedRoutes(api *gin.RouterGroup, catalog, cart, order, payment, identity *handler.ProxyHandler) {
+	api.POST("/auth/logout", identity.ProxyRequest())
 
-	users := api.Group("/users")
+	userGroup := api.Group("/users")
 	{
-		users.GET("/:id", monolith.ProxyRequest())
-		users.GET("", monolith.ProxyRequest())
+		userGroup.GET("/:id", identity.ProxyRequest())
+		userGroup.GET("", identity.ProxyRequest())
 	}
 
-	categories := api.Group("/categories")
+	categoryGroup := api.Group("/categories")
 	{
-		categories.POST("", monolith.ProxyRequest())
-		categories.PUT("/:id", monolith.ProxyRequest())
-		categories.DELETE("/:id", monolith.ProxyRequest())
+		categoryGroup.POST("", catalog.ProxyRequest())
+		categoryGroup.PUT("/:id", catalog.ProxyRequest())
+		categoryGroup.DELETE("/:id", catalog.ProxyRequest())
 	}
 
-	products := api.Group("/products")
+	productGroup := api.Group("/products")
 	{
-		products.POST("", monolith.ProxyRequest())
-		products.PUT("/:id", monolith.ProxyRequest())
-		products.DELETE("/:id", monolith.ProxyRequest())
+		productGroup.POST("", catalog.ProxyRequest())
+		productGroup.PUT("/:id", catalog.ProxyRequest())
+		productGroup.DELETE("/:id", catalog.ProxyRequest())
 	}
 
 	cartGroup := api.Group("/cart")
 	{
-		cartGroup.GET("", monolith.ProxyRequest())
-		cartGroup.DELETE("", monolith.ProxyRequest())
-		cartGroup.POST("/items", monolith.ProxyRequest())
-		cartGroup.PUT("/items/:product_id", monolith.ProxyRequest())
-		cartGroup.DELETE("/items/:product_id", monolith.ProxyRequest())
+		cartGroup.GET("", cart.ProxyRequest())
+		cartGroup.DELETE("", cart.ProxyRequest())
+		cartGroup.POST("/items", cart.ProxyRequest())
+		cartGroup.PUT("/items/:product_id", cart.ProxyRequest())
+		cartGroup.DELETE("/items/:product_id", cart.ProxyRequest())
 	}
 
 	orderGroup := api.Group("/orders")
 	{
-		orderGroup.POST("", monolith.ProxyRequest())
-		orderGroup.GET("", monolith.ProxyRequest())
-		orderGroup.GET("/:id", monolith.ProxyRequest())
+		orderGroup.POST("", order.ProxyRequest())
+		orderGroup.GET("", order.ProxyRequest())
+		orderGroup.GET("/:id", order.ProxyRequest())
 	}
 
 	paymentGroup := api.Group("/payments")
 	{
-		paymentGroup.POST("/online", monolith.ProxyRequest())
-		paymentGroup.POST("/cod", monolith.ProxyRequest())
-		paymentGroup.GET("/order/:order_id", monolith.ProxyRequest())
+		paymentGroup.POST("/online", payment.ProxyRequest())
+		paymentGroup.POST("/cod", payment.ProxyRequest())
+		paymentGroup.GET("/order/:order_id", payment.ProxyRequest())
 	}
-
-	// ADMIN ROUTES (Can easily read from X-User-Role header)
-	// adminGroup := api.Group("/admin")
-	// adminGroup.Use(middleware.RequireRole("admin"))
-	// {
-	// 	adminGroup.PUT("/payments/order/:order_id/collect", monolith.ProxyRequest())
-	// 	adminGroup.PUT("/orders/:id/status", monolith.ProxyRequest())
-	// }
 }

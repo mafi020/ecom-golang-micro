@@ -1,75 +1,130 @@
 include .env
 
-MIGRATION_PATH = ./migrations
-PSQL_URL=postgres://$(PG_USER):$(PG_PASSWORD)@$(PG_HOST):$(PG_PORT)/$(PG_DB_NAME)?sslmode=disable
-PROTO_DIR = ./api/proto
-PROTO_GEN_OUT = ./internal/delivery/grpc/pb
 
-.PHONY: clean prepare dev-gateway dev-monolith dev install-golang-migrate db-create migration-version migration migrate-up migrate-down migrate-reset migrate-force proto-clean proto-gen
+.PHONY: clean prepare kill reset restart dev-gateway dev-catalog dev-cart dev-order dev-payment dev-identity install-golang-migrate migration-version migration migrate-up migrate-down migrate-reset migrate-force proto-clean proto-gen
 
-# Cleans up existing frozen or cached executables in your bin folder
+# --- DYNAMIC DATABASE MIGRATION STRATEGY ---
+
+ifeq ($(MAKECMDGOALS),$(filter $(MAKECMDGOALS),migration-version migration migrate-up migrate-down migrate-reset migrate-force))
+ifndef service
+$(error Missing required parameter. Usage: 'make <target> service=<catalog|cart|order|payment|identity>')
+endif
+endif
+
+ifeq ($(service),catalog)
+    TARGET_DB_URL = postgres://$(PG_USER):$(PG_PASSWORD)@$(PG_HOST):$(PG_PORT)/$(PG_CATALOG_DB_NAME)?sslmode=disable
+    MIGRATION_PATH = ./migrations/catalog
+else ifeq ($(service),cart)
+    TARGET_DB_URL = postgres://$(PG_USER):$(PG_PASSWORD)@$(PG_HOST):$(PG_PORT)/$(PG_CART_DB_NAME)?sslmode=disable
+    MIGRATION_PATH = ./migrations/cart
+else ifeq ($(service),order)
+    TARGET_DB_URL = postgres://$(PG_USER):$(PG_PASSWORD)@$(PG_HOST):$(PG_PORT)/$(PG_ORDER_DB_NAME)?sslmode=disable
+    MIGRATION_PATH = ./migrations/order
+else ifeq ($(service),payment)
+    TARGET_DB_URL = postgres://$(PG_USER):$(PG_PASSWORD)@$(PG_HOST):$(PG_PORT)/$(PG_PAYMENT_DB_NAME)?sslmode=disable
+    MIGRATION_PATH = ./migrations/payment
+else ifeq ($(service),identity)
+    TARGET_DB_URL = postgres://$(PG_USER):$(PG_PASSWORD)@$(PG_HOST):$(PG_PORT)/$(PG_IDENTITY_DB_NAME)?sslmode=disable
+    MIGRATION_PATH = ./migrations/identity
+endif
+
+
 clean:
-	@rm -f bin/*.exe bin/*.log
-	@rm -rf bin/.air-monolith-state bin/.air-gateway-state
+	@echo "Cleaning build artifacts..."
+	@rm -f bin/*.exe bin/*.exe~ bin/*.log
+	@rm -rf bin/gateway-state bin/catalog-state bin/cart-state bin/order-state bin/payment-state bin/identity-state
 
-# 🚀 NEW: Guarantees the entire nested folder tree exists for Windows
 prepare: clean
-	@mkdir -p bin/.air-monolith-state
-	@mkdir -p bin/.air-gateway-state
+	@mkdir -p bin/gateway-state
+	@mkdir -p bin/catalog-state
+	@mkdir -p bin/cart-state
+	@mkdir -p bin/order-state
+	@mkdir -p bin/payment-state
+	@mkdir -p bin/identity-state
+
+kill:
+	@echo "Force killing all running service processes..."
+	-@taskkill /F /IM api-gateway.exe 2>/dev/null || true
+	-@taskkill /F /IM catalog-service.exe 2>/dev/null || true
+	-@taskkill /F /IM cart-service.exe 2>/dev/null || true
+	-@taskkill /F /IM order-service.exe 2>/dev/null || true
+	-@taskkill /F /IM payment-service.exe 2>/dev/null || true
+	-@taskkill /F /IM identity-service.exe 2>/dev/null || true
+	-@taskkill /F /IM air.exe 2>/dev/null || true
+	@echo "Releasing gRPC ports..."
+	-@powershell -NoProfile -ExecutionPolicy Bypass -File scripts/kill-ports.ps1
+	@echo "Done."
+
+# Kill hanging processes then clean artifacts
+reset: kill clean prepare
+	@echo "Waiting for ports to be released..."
+	@sleep 3
+
+# Full fresh restart
+restart: kill dev
 
 dev-gateway:
 	air -c .air.gateway.toml
 
-dev-monolith:
-	air -c .air.monolith.toml
+dev-catalog:
+	air -c .air.catalog.toml
+
+dev-cart:
+	air -c .air.cart.toml
+
+dev-order:
+	air -c .air.order.toml
+
+dev-payment:
+	air -c .air.payment.toml
+
+dev-identity:
+	air -c .air.identity.toml
 
 # Starts the clean, synchronized live-reload environment
-dev: prepare
-	@make -j 2 dev-gateway dev-monolith
+dev: reset
+	@make -j 6 dev-gateway dev-catalog dev-cart dev-order dev-payment dev-identity
+
+# ── MIGRATION COMMAND CHANNELS ────────────────────────────────────────────────
 
 install-golang-migrate:
 	go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
-db-create:
-	psql -U postgres -h localhost -c "CREATE DATABASE ecommerce_db;"
-
 migration-version:
-	migrate -database "$(PSQL_URL)" -path $(MIGRATION_PATH) version
+	migrate -database "$(TARGET_DB_URL)" -path $(MIGRATION_PATH) version
 
 migration:
-# 	Expamle: make migration name=create_order_items_table
 	migrate create -ext sql -dir $(MIGRATION_PATH) -seq $(name)
 
 migrate-up:
-	migrate -database "$(PSQL_URL)" -path $(MIGRATION_PATH) up
+	migrate -database "$(TARGET_DB_URL)" -path $(MIGRATION_PATH) up
 
 migrate-down:
-	migrate -database "$(PSQL_URL)" -path $(MIGRATION_PATH) down
+	migrate -database "$(TARGET_DB_URL)" -path $(MIGRATION_PATH) down
 
-# Resets the database by running all down migrations, then all up migrations
 migrate-reset:
-	migrate -database "$(PSQL_URL)" -path $(MIGRATION_PATH) down -all
-	migrate -database "$(PSQL_URL)" -path $(MIGRATION_PATH) up
+	migrate -database "$(TARGET_DB_URL)" -path $(MIGRATION_PATH) down -all
+	migrate -database "$(TARGET_DB_URL)" -path $(MIGRATION_PATH) up
 
-# Use this if your migration fails and gets stuck (e.g., make migrate-force version=1)
 migrate-force:
-	migrate -database "$(PSQL_URL)" -path $(MIGRATION_PATH) force $(version)
+	migrate -database "$(TARGET_DB_URL)" -path $(MIGRATION_PATH) force $(version)
 
-# Removes previously auto-generated pb files to avoid ghost compilation artifacts
+
+PROTO_DIR     = proto/$(service)
+PROTO_GEN_OUT = proto/$(service)
+
 proto-clean:
-	@echo "Cleaning old generated gRPC code..."
-	@if [ -d "$(PROTO_GEN_OUT)" ]; then rm -rf $(PROTO_GEN_OUT)/*; fi
+ifndef service
+	$(error Missing required parameter. Usage: 'make proto-gen service=<service-name>')
+endif
+	@echo "Cleaning old generated grpc code in [$(PROTO_GEN_OUT)]..."
+	@if [ -d "$(PROTO_GEN_OUT)" ]; then rm -f $(PROTO_GEN_OUT)/*.pb.go; fi
 
-# Automatically creates output paths and compiles all .proto files in the folder
 proto-gen: proto-clean
-	@echo "Generating Go gRPC source files..."
+	@echo "Generating Go grpc source files for [$(service)]..."
 	@mkdir -p $(PROTO_GEN_OUT)
 	protoc --proto_path=$(PROTO_DIR) \
-		-I=$(PROTO_DIR) \
-		--go_out=. --go_opt=module=github.com/mafi020/ecom-golang \
-		--go-grpc_out=. --go-grpc_opt=module=github.com/mafi020/ecom-golang \
+		--go_out=. --go_opt=module=github.com/mafi020/ecom-golang-micro \
+		--go-grpc_out=. --go-grpc_opt=module=github.com/mafi020/ecom-golang-micro \
 		$(PROTO_DIR)/*.proto
-	@echo "Successfully compiled Protobuf contracts!"
-
-	
-
+	@echo "Successfully compiled Protobuf contracts into [$(PROTO_GEN_OUT)]!"

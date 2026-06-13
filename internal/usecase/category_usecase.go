@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/mafi020/ecom-golang/internal/delivery/http/utils"
-	"github.com/mafi020/ecom-golang/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/delivery/http/utils"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
 )
 
 type categoryRepository interface {

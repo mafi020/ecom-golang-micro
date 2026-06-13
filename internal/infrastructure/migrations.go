@@ -33,9 +33,9 @@ func findProjectRoot() string {
 	return "."
 }
 
-func RunMigrations(databaseURL string) error {
+func RunMigrations(dsn, path string) error {
 	projectRoot := findProjectRoot()
-	migrationsPath := filepath.Join(projectRoot, "migrations")
+	migrationsPath := filepath.Join(projectRoot, path)
 
 	log.Printf("Initializing OS File System Driver for path: %s", migrationsPath)
 
@@ -49,7 +49,7 @@ func RunMigrations(databaseURL string) error {
 	m, err := migrate.NewWithSourceInstance(
 		"file",
 		fileDriver,
-		databaseURL,
+		dsn,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to build migrator instance: %w", err)

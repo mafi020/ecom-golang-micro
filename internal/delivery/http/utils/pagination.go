@@ -2,7 +2,7 @@ package utils
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/mafi020/ecom-golang/internal/utils"
+	"github.com/mafi020/ecom-golang-micro/internal/utils"
 )
 
 // ParseQueryParams is a helper for simple lists that don't need extra filters

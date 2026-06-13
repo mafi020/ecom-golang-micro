@@ -3,7 +3,7 @@ package request
 import (
 	"encoding/json"
 
-	"github.com/mafi020/ecom-golang/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
 )
 
 type CreatePaymentRequest struct {

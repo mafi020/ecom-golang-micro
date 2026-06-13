@@ -5,11 +5,11 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mafi020/ecom-golang/internal/apperrors"
-	"github.com/mafi020/ecom-golang/internal/delivery/http/request"
-	"github.com/mafi020/ecom-golang/internal/delivery/http/utils"
-	"github.com/mafi020/ecom-golang/internal/entity"
-	"github.com/mafi020/ecom-golang/internal/response"
+	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
+	"github.com/mafi020/ecom-golang-micro/internal/delivery/http/request"
+	"github.com/mafi020/ecom-golang-micro/internal/delivery/http/utils"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/response"
 )
 
 type authUseCase interface {

@@ -1,6 +1,6 @@
 package request
 
-import "github.com/mafi020/ecom-golang/internal/entity"
+import "github.com/mafi020/ecom-golang-micro/internal/entity"
 
 type RegisterRequest struct {
 	Name            string      `json:"name" binding:"required"`

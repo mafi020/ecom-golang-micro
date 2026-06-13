@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/mafi020/ecom-golang/internal/apperrors"
+	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
 )
 
 func HandleError(c *gin.Context, err error) {

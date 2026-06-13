@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/mafi020/ecom-golang/internal/apperrors"
-	"github.com/mafi020/ecom-golang/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
 )
 
 type PostgresCategoryRepository struct {
@@ -72,7 +72,7 @@ func (r *PostgresCategoryRepository) GetCategoryByID(ctx context.Context, id int
 
 func (r *PostgresCategoryRepository) GetCategoryByIDWithProducts(ctx context.Context, id int64) (*entity.Category, error) {
 	query := `
-		SELECT c.id, c.name, c.slug, c.parent_id, c.created_at, c.updated_at, p.id, p.name, p.description, p.price 
+		SELECT c.id, c.name, c.slug, c.parent_id, c.created_at, c.updated_at, p.id, p.name, p.description, p.price_cents 
 		FROM categories c 
 		LEFT JOIN products p ON c.id = p.category_id 
 		WHERE c.id = $1

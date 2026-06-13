@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+package payment;
+
+option go_package = "github.com/mafi020/ecom-golang-micro/proto/payment;paymentpb";
+
+import "google/protobuf/timestamp.proto";
+
+// ── ENUMS ───────────────────────────────────────────────────────────────────
+
+enum PaymentMethod {
+  PAYMENT_METHOD_UNSPECIFIED = 0;
+  PAYMENT_METHOD_COD = 1;
+  PAYMENT_METHOD_ONLINE = 2;
+}
+
+enum PaymentProvider {
+  PAYMENT_PROVIDER_UNSPECIFIED = 0;
+  PAYMENT_PROVIDER_STRIPE = 1;
+  PAYMENT_PROVIDER_SSLCOMMERZ = 2;
+  PAYMENT_PROVIDER_PAYPAL = 3; 
+}
+
+enum PaymentStatus {
+  PAYMENT_STATUS_UNSPECIFIED = 0;
+  PAYMENT_STATUS_PENDING = 1;
+  PAYMENT_STATUS_COMPLETED = 2;
+  PAYMENT_STATUS_FAILED = 3;
+  PAYMENT_STATUS_REFUNDED = 4;
+}
+
+// ── MESSAGES ────────────────────────────────────────────────────────────────
+
+message Payment {
+  int64 id = 1;
+  int64 order_id = 2;
+  string transaction_id = 3;
+  PaymentMethod method = 4;
+  PaymentStatus status = 5;
+  int64 amount = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+
+  oneof details {
+    OnlineTransaction online_transaction = 9;
+    CODDetail cod_detail = 10;
+  }
+}
+
+message OnlineTransaction {
+  int64 id = 1;
+  int64 payment_id = 2;
+  PaymentProvider provider = 3;
+  string gateway_ref = 4;
+  string gateway_status = 5;
+  string raw_response = 6; 
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message CODDetail {
+  int64 id = 1;
+  int64 payment_id = 2;
+  google.protobuf.Timestamp collected_at = 3; 
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+}
+
+message CreatePaymentRequest {
+  int64 user_id = 1;         // Added to authenticate order ownership
+  int64 order_id = 2;
+  PaymentMethod method = 3;
+  PaymentProvider provider = 4; 
+  string gateway_ref = 5;    // Added for PayOnline input
+  string gateway_status = 6; // Added for PayOnline input
+  string raw_response = 7;   // Added for PayOnline input
+}
+
+message CreatePaymentResponse {
+  Payment payment = 1;
+}
+
+message GetPaymentRequest {
+  int64 order_id = 1;
+  int64 user_id = 2;         // 🚀 FIXED: Required for validation in GetPaymentByOrderID
+}
+
+message CollectCODRequest {
+  int64 order_id = 1;        // 🚀 FIXED: Required for admin collection action
+}
+
+message CollectCODResponse {
+  Payment payment = 1;
+}
+
+// ── SERVICE DEFINITIONS ─────────────────────────────────────────────────────
+
+service PaymentService {
+  rpc CreatePayment (CreatePaymentRequest) returns (CreatePaymentResponse);
+  rpc GetPaymentByOrderId (GetPaymentRequest) returns (Payment);
+  rpc CollectCOD (CollectCODRequest) returns (CollectCODResponse); // 🚀 FIXED: Missing admin endpoint
+}

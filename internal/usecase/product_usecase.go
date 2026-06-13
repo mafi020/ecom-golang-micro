@@ -3,7 +3,7 @@ package usecase
 import (
 	"context"
 
-	"github.com/mafi020/ecom-golang/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
 )
 
 type productInterface interface {
@@ -12,6 +12,8 @@ type productInterface interface {
 	Update(ctx context.Context, id int64, input *entity.UpdateProductInput) (*entity.Product, error)
 	Delete(ctx context.Context, id int64) error
 	List(ctx context.Context, params entity.GetProductsParams) ([]entity.Product, int, error)
+	BatchUpdate(ctx context.Context, updates map[int64]*entity.UpdateProductInput) error
+	GetByIDs(ctx context.Context, ids []int64) ([]entity.Product, error)
 }
 
 type productCategoryInterface interface {
@@ -49,4 +51,12 @@ func (uc *ProductUseCase) Delete(ctx context.Context, id int64) error {
 
 func (uc *ProductUseCase) List(ctx context.Context, params entity.GetProductsParams) ([]entity.Product, int, error) {
 	return uc.productRepo.List(ctx, params)
+}
+
+func (uc *ProductUseCase) BatchUpdate(ctx context.Context, updates map[int64]*entity.UpdateProductInput) error {
+	return uc.productRepo.BatchUpdate(ctx, updates)
+}
+
+func (uc *ProductUseCase) GetByIDs(ctx context.Context, ids []int64) ([]entity.Product, error) {
+	return uc.productRepo.GetByIDs(ctx, ids)
 }

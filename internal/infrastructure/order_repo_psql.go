@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/mafi020/ecom-golang/internal/apperrors"
-	"github.com/mafi020/ecom-golang/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
+	"github.com/mafi020/ecom-golang-micro/internal/entity"
 )
 
 type PostgresOrderRepository struct {
@@ -108,7 +108,7 @@ func (r *PostgresOrderRepository) ListOrders(ctx context.Context, userID *int64,
 func (r *PostgresOrderRepository) GetOrderByID(ctx context.Context, id, userID int64) (*entity.Order, error) {
 	query := `
 		SELECT o.id, o.user_id, o.status, o.total_price, o.created_at, o.updated_at,
-			   oi.id, oi.order_id, oi.product_id, oi.quantity, oi.price, oi.created_at, oi.updated_at
+			   oi.id, oi.order_id, oi.product_id, oi.quantity, oi.price_cents, oi.created_at, oi.updated_at
 		FROM orders o
 		LEFT JOIN order_items oi ON oi.order_id = o.id
 		WHERE o.id = $1 AND o.user_id = $2
@@ -130,7 +130,7 @@ func (r *PostgresOrderRepository) GetOrderByID(ctx context.Context, id, userID i
 			orderID   sql.NullInt64
 			productID sql.NullInt64
 			quantity  sql.NullInt32
-			itemPrice sql.NullFloat64
+			itemPrice sql.NullInt64
 			itemCA    sql.NullTime
 			itemUA    sql.NullTime
 		)
@@ -153,13 +153,13 @@ func (r *PostgresOrderRepository) GetOrderByID(ctx context.Context, id, userID i
 		if itemID.Valid && !seenItems[itemID.Int64] {
 			seenItems[itemID.Int64] = true
 			order.OrderItems = append(order.OrderItems, entity.OrderItem{
-				ID:        itemID.Int64,
-				OrderID:   orderID.Int64,
-				ProductID: productID.Int64,
-				Quantity:  int(quantity.Int32),
-				Price:     itemPrice.Float64,
-				CreatedAt: itemCA.Time,
-				UpdatedAt: itemUA.Time,
+				ID:         itemID.Int64,
+				OrderID:    orderID.Int64,
+				ProductID:  productID.Int64,
+				Quantity:   quantity.Int32,
+				PriceCents: itemPrice.Int64,
+				CreatedAt:  itemCA.Time,
+				UpdatedAt:  itemUA.Time,
 			})
 		}
 	}
