@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -13,6 +13,7 @@ import (
 	"github.com/mafi020/ecom-golang-micro/config"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/handler"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
+	"github.com/mafi020/ecom-golang-micro/internal/logger"
 	paymentpb "github.com/mafi020/ecom-golang-micro/proto/payment"
 	"github.com/mafi020/ecom-golang-micro/rpc_client"
 	"google.golang.org/grpc"
@@ -27,12 +28,15 @@ type PaymentApp struct {
 
 func InitializePaymentApp() *PaymentApp {
 	cfg := config.LoadConfig()
+	appLogger := logger.NewJSONLogger()
+	slog.SetDefault(appLogger)
 	payment_dsn := cfg.PostgresDSN(cfg.Postgres.PgPaymentUser, cfg.Postgres.PgPaymentPassword, cfg.Postgres.PgPaymentHost, cfg.Postgres.PgPaymentDBName, cfg.Postgres.PgPaymentPort)
 
 	db := infrastructure.NewPostgresDB(payment_dsn, cfg.Postgres.PgPaymentDBName)
 
 	if err := infrastructure.RunMigrations(payment_dsn, "migrations/payment"); err != nil {
-		log.Fatalf("failed to run payment migrations: %v", err)
+		slog.Error("failed to run payment migrations", slog.Any("error", err))
+		panic(err)
 	}
 
 	rpcPool, err := rpc_client.InitializeClients(rpc_client.Config{
@@ -40,7 +44,8 @@ func InitializePaymentApp() *PaymentApp {
 	})
 
 	if err != nil {
-		log.Fatalf("Payment	microservice initialization blocked: cannot reach Order service: %v", err)
+		slog.Error("Microservice cluster initialization blocked: cannot reach Services", slog.Any("error", err))
+		panic(err)
 	}
 
 	transactor := infrastructure.NewPostgresTransactor(db)
@@ -62,9 +67,10 @@ func (a *PaymentApp) RunHTTP() (*http.Server, error) {
 	}
 
 	go func() {
-		log.Printf("Payment HTTP Server running cleanly on port %s", srv.Addr)
+		slog.Info("Payment HTTP Server running cleanly on ", slog.String("port", srv.Addr))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Payment HTTP Server failure: %v", err)
+			slog.Error("Payment HTTP Server failure", slog.Any("error", err))
+			panic(err)
 		}
 	}()
 
@@ -72,16 +78,17 @@ func (a *PaymentApp) RunHTTP() (*http.Server, error) {
 }
 
 func (a *PaymentApp) ShutdownHTTP(srv *http.Server) error {
-	log.Println("Shutting down Payment HTTP server...")
+	slog.Info("Shutting down Payment HTTP server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
+		slog.Error("Forced HTTP shutdown failed to release system resources cleanly", slog.Any("error", err))
 		return fmt.Errorf("forced Payment HTTP shutdown failed: %w", err)
 	}
 
-	log.Println("Payment HTTP Server exited cleanly")
+	slog.Info("Payment HTTP Server exited cleanly")
 	return nil
 }
 
@@ -90,34 +97,33 @@ func (a *PaymentApp) RunGRPC() (*grpc.Server, error) {
 	port := a.config.Server.PaymentServiceGRPCPort
 	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
+		slog.Error("Failed to lock and bind system TCP socket for gRPC engine", slog.String("port", port), slog.Any("error", err))
 		return nil, fmt.Errorf("failed to bind grpc tcp socket: %w", err)
 	}
 
 	srv := grpc.NewServer()
 
-	// Create handler structure passing down needed usecases context
 	grpcHandler := handler.NewPaymentGRPCHandler(a.usecases.PaymentUC)
 	paymentpb.RegisterPaymentServiceServer(srv, grpcHandler)
 
 	go func() {
-		log.Printf("Payment grpc Server running cleanly on port :%s", port)
+		slog.Info("Payment grpc Server running cleanly on", slog.String("port", port))
 		if err := srv.Serve(lis); err != nil {
-			log.Fatalf("Payment grpc Server failure: %v", err)
+			slog.Error("Fatal runtime exception thrown during gRPC mesh processing operations", slog.Any("error", err))
+			panic(err)
 		}
 	}()
 
 	return srv, nil
 }
 
-// ShutdownGRPC cleans up and terminates the grpc processes gracefully
 func (a *PaymentApp) ShutdownGRPC(srv *grpc.Server) error {
 	defer a.db.Close()
 	defer a.rpcPool.Close()
-	log.Println("Shutting down Payment grpc server...")
+	slog.Info("Shutting down Payment grpc server...")
 
-	// GracefulStop waits for all active connections and RPC requests to finish processing
 	srv.GracefulStop()
 
-	log.Println("Payment grpc Server exited cleanly")
+	slog.Info("Payment grpc Server exited cleanly")
 	return nil
 }

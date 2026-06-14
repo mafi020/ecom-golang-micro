@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -13,6 +13,7 @@ import (
 	"github.com/mafi020/ecom-golang-micro/config"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/handler"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
+	"github.com/mafi020/ecom-golang-micro/internal/logger"
 	orderpb "github.com/mafi020/ecom-golang-micro/proto/order"
 	"github.com/mafi020/ecom-golang-micro/rpc_client"
 	"google.golang.org/grpc"
@@ -27,12 +28,15 @@ type OrderApp struct {
 
 func InitializeOrderApp() *OrderApp {
 	cfg := config.LoadConfig()
+	appLogger := logger.NewJSONLogger()
+	slog.SetDefault(appLogger)
 	order_dsn := cfg.PostgresDSN(cfg.Postgres.PgOrderUser, cfg.Postgres.PgOrderPassword, cfg.Postgres.PgOrderHost, cfg.Postgres.PgOrderDBName, cfg.Postgres.PgOrderPort)
 
 	db := infrastructure.NewPostgresDB(order_dsn, cfg.Postgres.PgOrderDBName)
 
 	if err := infrastructure.RunMigrations(order_dsn, "migrations/order"); err != nil {
-		log.Fatalf("failed to run order migrations: %v", err)
+		slog.Error("failed to run oder migrations", slog.Any("error", err))
+		panic(err)
 	}
 
 	rpcPool, err := rpc_client.InitializeClients(rpc_client.Config{
@@ -41,7 +45,8 @@ func InitializeOrderApp() *OrderApp {
 	})
 
 	if err != nil {
-		log.Fatalf("Order microservice initialization blocked: cannot reach Catalog service: %v", err)
+		slog.Error("Microservice cluster initialization blocked: cannot reach Services", slog.Any("error", err))
+		panic(err)
 	}
 
 	transactor := infrastructure.NewPostgresTransactor(db)
@@ -63,9 +68,10 @@ func (a *OrderApp) RunHTTP() (*http.Server, error) {
 	}
 
 	go func() {
-		log.Printf("Order HTTP Server running cleanly on port %s", srv.Addr)
+		slog.Info("Order HTTP Server running cleanly on ", slog.String("port", srv.Addr))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Order HTTP Server failure: %v", err)
+			slog.Error("Order HTTP Server failure", slog.Any("error", err))
+			panic(err)
 		}
 	}()
 
@@ -73,16 +79,17 @@ func (a *OrderApp) RunHTTP() (*http.Server, error) {
 }
 
 func (a *OrderApp) ShutdownHTTP(srv *http.Server) error {
-	log.Println("Shutting down Order HTTP server...")
+	slog.Info("Shutting down Order HTTP server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
+		slog.Error("Forced HTTP shutdown failed to release system resources cleanly", slog.Any("error", err))
 		return fmt.Errorf("forced Order HTTP shutdown failed: %w", err)
 	}
 
-	log.Println("Order HTTP Server exited cleanly")
+	slog.Info("Order HTTP Server exited cleanly")
 	return nil
 }
 
@@ -91,6 +98,7 @@ func (a *OrderApp) RunGRPC() (*grpc.Server, error) {
 	port := a.config.Server.OrderServiceGRPCPort
 	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
+		slog.Error("Failed to lock and bind system TCP socket for gRPC engine", slog.String("port", port), slog.Any("error", err))
 		return nil, fmt.Errorf("failed to bind grpc tcp socket: %w", err)
 	}
 
@@ -101,9 +109,10 @@ func (a *OrderApp) RunGRPC() (*grpc.Server, error) {
 	orderpb.RegisterOrderServiceServer(srv, grpcHandler)
 
 	go func() {
-		log.Printf("Order grpc Server running cleanly on port :%s", port)
+		slog.Info("Order grpc Server running cleanly on", slog.String("port", port))
 		if err := srv.Serve(lis); err != nil {
-			log.Fatalf("Order grpc Server failure: %v", err)
+			slog.Error("Fatal runtime exception thrown during gRPC mesh processing operations", slog.Any("error", err))
+			panic(err)
 		}
 	}()
 
@@ -114,11 +123,11 @@ func (a *OrderApp) RunGRPC() (*grpc.Server, error) {
 func (a *OrderApp) ShutdownGRPC(srv *grpc.Server) error {
 	defer a.db.Close()
 	defer a.rpcPool.Close()
-	log.Println("Shutting down Order grpc server...")
+	slog.Info("Shutting down Order grpc server...")
 
 	// GracefulStop waits for all active connections and RPC requests to finish processing
 	srv.GracefulStop()
 
-	log.Println("Order grpc Server exited cleanly")
+	slog.Info("Order grpc Server exited cleanly")
 	return nil
 }

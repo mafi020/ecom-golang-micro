@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -13,6 +13,7 @@ import (
 	"github.com/mafi020/ecom-golang-micro/config"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/handler"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
+	"github.com/mafi020/ecom-golang-micro/internal/logger"
 	cartpb "github.com/mafi020/ecom-golang-micro/proto/cart"
 	"github.com/mafi020/ecom-golang-micro/rpc_client"
 	"google.golang.org/grpc"
@@ -27,12 +28,22 @@ type CartApp struct {
 
 func InitializeCartApp() *CartApp {
 	cfg := config.LoadConfig()
-	cart_dsn := cfg.PostgresDSN(cfg.Postgres.PgCartUser, cfg.Postgres.PgCartPassword, cfg.Postgres.PgCartHost, cfg.Postgres.PgCartDBName, cfg.Postgres.PgCartPort)
+	appLogger := logger.NewJSONLogger()
+	slog.SetDefault(appLogger)
+
+	cart_dsn := cfg.PostgresDSN(
+		cfg.Postgres.PgCartUser,
+		cfg.Postgres.PgCartPassword,
+		cfg.Postgres.PgCartHost,
+		cfg.Postgres.PgCartDBName,
+		cfg.Postgres.PgCartPort,
+	)
 
 	db := infrastructure.NewPostgresDB(cart_dsn, cfg.Postgres.PgCartDBName)
 
 	if err := infrastructure.RunMigrations(cart_dsn, "migrations/cart"); err != nil {
-		log.Fatalf("failed to run cart migrations: %v", err)
+		slog.Error("failed to run cart migrations", slog.Any("error", err))
+		panic(err)
 	}
 
 	rpcPool, err := rpc_client.InitializeClients(rpc_client.Config{
@@ -40,7 +51,8 @@ func InitializeCartApp() *CartApp {
 	})
 
 	if err != nil {
-		log.Fatalf("Cart microservice initialization blocked: cannot reach Catalog service: %v", err)
+		slog.Error("Microservice cluster initialization blocked: cannot reach Services", slog.Any("error", err))
+		panic(err)
 	}
 
 	repos := RegisterRepositories(db)
@@ -60,9 +72,10 @@ func (a *CartApp) RunHTTP() (*http.Server, error) {
 	}
 
 	go func() {
-		log.Printf("Cart HTTP Server running cleanly on port %s", srv.Addr)
+		slog.Info("Cart HTTP Server running cleanly on ", slog.String("port", srv.Addr))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Cart HTTP Server failure: %v", err)
+			slog.Error("Cart HTTP Server failure", slog.Any("error", err))
+			panic(err)
 		}
 	}()
 
@@ -71,16 +84,17 @@ func (a *CartApp) RunHTTP() (*http.Server, error) {
 
 func (a *CartApp) ShutdownHTTP(srv *http.Server) error {
 
-	log.Println("Shutting down Cart HTTP server...")
+	slog.Info("Shutting down Cart HTTP server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
+		slog.Error("Forced HTTP shutdown failed to release system resources cleanly", slog.Any("error", err))
 		return fmt.Errorf("forced Cart HTTP shutdown failed: %w", err)
 	}
 
-	log.Println("Cart HTTP Server exited cleanly")
+	slog.Info("Cart HTTP Server exited cleanly")
 	return nil
 }
 
@@ -88,6 +102,7 @@ func (a *CartApp) RunGRPC() (*grpc.Server, error) {
 	port := a.config.Server.CartServiceGRPCPort
 	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
+		slog.Error("Failed to lock and bind system TCP socket for gRPC engine", slog.String("port", port), slog.Any("error", err))
 		return nil, fmt.Errorf("failed to bind grpc tcp socket: %w", err)
 	}
 
@@ -97,9 +112,10 @@ func (a *CartApp) RunGRPC() (*grpc.Server, error) {
 	cartpb.RegisterCartServiceServer(srv, grpcHandler)
 
 	go func() {
-		log.Printf("Cart grpc Server running cleanly on port :%s", port)
+		slog.Info("Cart grpc Server running cleanly on", slog.String("port", port))
 		if err := srv.Serve(lis); err != nil {
-			log.Fatalf("Cart grpc Server failure: %v", err)
+			slog.Error("Fatal runtime exception thrown during gRPC mesh processing operations", slog.Any("error", err))
+			panic(err)
 		}
 	}()
 
@@ -111,11 +127,11 @@ func (a *CartApp) ShutdownGRPC(srv *grpc.Server) error {
 	defer a.db.Close()
 	defer a.rpcPool.Close()
 
-	log.Println("Shutting down Cart grpc server...")
+	slog.Info("Shutting down Cart grpc server...")
 
 	// GracefulStop waits for all active connections and RPC requests to finish processing
 	srv.GracefulStop()
 
-	log.Println("Cart grpc Server exited cleanly")
+	slog.Info("Cart grpc Server exited cleanly")
 	return nil
 }

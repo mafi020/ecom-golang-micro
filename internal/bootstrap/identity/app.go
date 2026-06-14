@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"time"
@@ -13,6 +13,7 @@ import (
 	"github.com/mafi020/ecom-golang-micro/config"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/handler"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
+	"github.com/mafi020/ecom-golang-micro/internal/logger"
 	identitypb "github.com/mafi020/ecom-golang-micro/proto/identity"
 	"google.golang.org/grpc"
 )
@@ -25,12 +26,22 @@ type IdentityApp struct {
 
 func InitializeIdentityApp() *IdentityApp {
 	cfg := config.LoadConfig()
-	identity_dsn := cfg.PostgresDSN(cfg.Postgres.PgIdentityUser, cfg.Postgres.PgIdentityPassword, cfg.Postgres.PgIdentityHost, cfg.Postgres.PgIdentityDBName, cfg.Postgres.PgIdentityPort)
+
+	appLogger := logger.NewJSONLogger()
+	slog.SetDefault(appLogger)
+
+	identity_dsn := cfg.PostgresDSN(cfg.Postgres.PgIdentityUser,
+		cfg.Postgres.PgIdentityPassword,
+		cfg.Postgres.PgIdentityHost,
+		cfg.Postgres.PgIdentityDBName,
+		cfg.Postgres.PgIdentityPort,
+	)
 
 	db := infrastructure.NewPostgresDB(identity_dsn, cfg.Postgres.PgIdentityDBName)
 
 	if err := infrastructure.RunMigrations(identity_dsn, "migrations/identity"); err != nil {
-		log.Fatalf("failed to run identity migrations: %v", err)
+		slog.Error("failed to run cart migrations", slog.Any("error", err))
+		panic(err)
 	}
 
 	transactor := infrastructure.NewPostgresTransactor(db)
@@ -52,9 +63,10 @@ func (a *IdentityApp) RunHTTP() (*http.Server, error) {
 	}
 
 	go func() {
-		log.Printf("Identity HTTP Server running cleanly on port %s", srv.Addr)
+		slog.Info("Identity HTTP Server running cleanly on ", slog.String("port", srv.Addr))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Identity HTTP Server failure: %v", err)
+			slog.Error("Identity HTTP Server failure", slog.Any("error", err))
+			panic(err)
 		}
 	}()
 
@@ -62,16 +74,17 @@ func (a *IdentityApp) RunHTTP() (*http.Server, error) {
 }
 
 func (a *IdentityApp) ShutdownHTTP(srv *http.Server) error {
-	log.Println("Shutting down Identity HTTP server...")
+	slog.Info("Shutting down Identity HTTP server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
+		slog.Error("Forced HTTP shutdown failed to release system resources cleanly", slog.Any("error", err))
 		return fmt.Errorf("forced Identity HTTP shutdown failed: %w", err)
 	}
 
-	log.Println("Identity HTTP Server exited cleanly")
+	slog.Info("Identity HTTP Server exited cleanly")
 	return nil
 }
 
@@ -80,6 +93,7 @@ func (a *IdentityApp) RunGRPC() (*grpc.Server, error) {
 	port := a.config.Server.IdentityServiceGRPCPort
 	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
+		slog.Error("Failed to lock and bind system TCP socket for gRPC engine", slog.String("port", port), slog.Any("error", err))
 		return nil, fmt.Errorf("failed to bind grpc tcp socket: %w", err)
 	}
 
@@ -90,9 +104,10 @@ func (a *IdentityApp) RunGRPC() (*grpc.Server, error) {
 	identitypb.RegisterIdentityServiceServer(srv, grpcHandler)
 
 	go func() {
-		log.Printf("Identity grpc Server running cleanly on port :%s", port)
+		slog.Info("Identity grpc Server running cleanly on", slog.String("port", port))
 		if err := srv.Serve(lis); err != nil {
-			log.Fatalf("Identity grpc Server failure: %v", err)
+			slog.Error("Fatal runtime exception thrown during gRPC mesh processing operations", slog.Any("error", err))
+			panic(err)
 		}
 	}()
 
@@ -103,11 +118,11 @@ func (a *IdentityApp) RunGRPC() (*grpc.Server, error) {
 func (a *IdentityApp) ShutdownGRPC(srv *grpc.Server) error {
 	defer a.db.Close()
 
-	log.Println("Shutting down Identity grpc server...")
+	slog.Info("Shutting down Identity grpc server...")
 
 	// GracefulStop waits for all active connections and RPC requests to finish processing
 	srv.GracefulStop()
 
-	log.Println("Identity grpc Server exited cleanly")
+	slog.Info("Identity grpc Server exited cleanly")
 	return nil
 }
