@@ -9,19 +9,18 @@ import (
 )
 
 func ContextLoggerMiddleware() gin.HandlerFunc {
-	baseLogger := logger.NewJSONLogger()
-
+	// 🚀 FIXED: Removed custom instantiation. We now leverage the global system-wide Singleton.
 	return func(c *gin.Context) {
 		userIDStr := c.GetHeader("X-User-ID")
 		userRole := c.GetHeader("X-User-Role")
 
-		// Prepare fields slice array safely
+		// Prepare structured context attributes
 		logAttrs := []any{
 			slog.String("path", c.Request.URL.Path),
 			slog.String("method", c.Request.Method),
 		}
 
-		// If user_id header is passed down from Gateway, convert it to a type-safe integer representation
+		// Type-safe header extraction
 		if userIDStr != "" {
 			if userID, err := strconv.ParseInt(userIDStr, 10, 64); err == nil {
 				logAttrs = append(logAttrs, slog.Int64("user_id", userID))
@@ -34,10 +33,10 @@ func ContextLoggerMiddleware() gin.HandlerFunc {
 			logAttrs = append(logAttrs, slog.String("user_role", userRole))
 		}
 
-		// Attach tracing attributes directly to this request log instance
-		requestLogger := baseLogger.With(logAttrs...)
+		// 🚀 FIXED: Derive request-scoped log logger from the active pre-configured Singleton engine instance
+		requestLogger := slog.Default().With(logAttrs...)
 
-		// Bake the tailored logger straight into the standard http.Request context
+		// Bake the tracking logger context directly into the request pipeline
 		ctxWithLogger := logger.ToContext(c.Request.Context(), requestLogger)
 		c.Request = c.Request.WithContext(ctxWithLogger)
 

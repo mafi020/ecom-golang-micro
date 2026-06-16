@@ -9,61 +9,70 @@ import (
 
 type ctxKey struct{}
 
-// 🚀 FIXED: Default global engine boots up with the conditional source filtering engine wrapper
-var defaultLogger = slog.New(NewConditionalSourceHandler(slog.LevelInfo))
+var globalLogger *slog.Logger
+
+func init() {
+	// 🚀 SINGLETON INITIALIZATION: This runs exactly once when the package is loaded
+	handler := &ConditionalSourceHandler{
+		infoHandler: slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level:     slog.LevelInfo,
+			AddSource: false, // Clean and fast for INFO logs
+		}),
+		errorHandler: slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level:       slog.LevelInfo,
+			AddSource:   true, // Automatically captures file/line/func for ERROR logs
+			ReplaceAttr: formatLogOrigin,
+		}),
+	}
+
+	globalLogger = slog.New(handler)
+	slog.SetDefault(globalLogger) // Registers it as the system-wide global Singleton
+}
+
+// FromContext extracts the request-scoped logger from context, falling back to the global Singleton
+func FromContext(ctx context.Context) *slog.Logger {
+	if logger, ok := ctx.Value(ctxKey{}).(*slog.Logger); ok {
+		return logger
+	}
+	return globalLogger
+}
 
 // ToContext embeds an existing logger into the provided context
 func ToContext(ctx context.Context, logger *slog.Logger) context.Context {
 	return context.WithValue(ctx, ctxKey{}, logger)
 }
 
-// FromContext extracts the request-scoped logger from context.
-func FromContext(ctx context.Context) *slog.Logger {
-	if logger, ok := ctx.Value(ctxKey{}).(*slog.Logger); ok {
-		return logger
-	}
-	return defaultLogger
-}
-
-// NewJSONLogger initializes a base production-ready structured slog engine
-func NewJSONLogger() *slog.Logger {
-	return slog.New(NewConditionalSourceHandler(slog.LevelInfo))
-}
-
-// ── CONDITIONAL SOURCE LOG HANDLER WRAPPER ───────────────────────────────────
+// ── OPTIMIZED ALLOCATION-FREE CONDITIONAL HANDLER ────────────────────────────
 
 type ConditionalSourceHandler struct {
-	baseLevel slog.Level
-}
-
-// NewConditionalSourceHandler provisions an isolated JSON runtime stream with variable schema layouts
-func NewConditionalSourceHandler(level slog.Level) slog.Handler {
-	return &ConditionalSourceHandler{baseLevel: level}
+	infoHandler  slog.Handler
+	errorHandler slog.Handler
 }
 
 func (h *ConditionalSourceHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return level >= h.baseLevel
+	return true
 }
 
 func (h *ConditionalSourceHandler) Handle(ctx context.Context, r slog.Record) error {
-	// 🚀 DYNAMIC TOGGLE MECHANISM: Enforce structural parameters exclusively on LevelError execution
-	addSource := r.Level >= slog.LevelError
-
-	jsonHandler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level:       h.baseLevel,
-		AddSource:   addSource, // Automatically turns true for ERROR, false for INFO
-		ReplaceAttr: formatLogOrigin,
-	})
-
-	return jsonHandler.Handle(ctx, r)
+	// 🚀 ZERO ALLOCATIONS: Routes directly to pre-initialized Singleton handlers
+	if r.Level >= slog.LevelError {
+		return h.errorHandler.Handle(ctx, r)
+	}
+	return h.infoHandler.Handle(ctx, r)
 }
 
 func (h *ConditionalSourceHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return h // Returns handler chain to support streaming properties
+	return &ConditionalSourceHandler{
+		infoHandler:  h.infoHandler.WithAttrs(attrs),
+		errorHandler: h.errorHandler.WithAttrs(attrs),
+	}
 }
 
 func (h *ConditionalSourceHandler) WithGroup(name string) slog.Handler {
-	return h
+	return &ConditionalSourceHandler{
+		infoHandler:  h.infoHandler.WithGroup(name),
+		errorHandler: h.errorHandler.WithGroup(name),
+	}
 }
 
 // ── CODE-ORIGIN FORMATTER ───────────────────────────────────────────────────
@@ -75,7 +84,6 @@ func formatLogOrigin(groups []string, a slog.Attr) slog.Attr {
 			return a
 		}
 
-		// Clean up absolute directory paths down to crisp, project-relative landmarks
 		cleanFile := source.File
 		if cwd, err := os.Getwd(); err == nil {
 			if rel, err := filepath.Rel(cwd, source.File); err == nil {
@@ -88,7 +96,7 @@ func formatLogOrigin(groups []string, a slog.Attr) slog.Attr {
 			Value: slog.GroupValue(
 				slog.String("file", cleanFile),
 				slog.Int("line", source.Line),
-				// slog.String("func", source.Function),
+				slog.String("func", source.Function),
 			),
 		}
 	}

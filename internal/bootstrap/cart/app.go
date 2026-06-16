@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mafi020/ecom-golang-micro/config"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/handler"
+	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/utils"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
-	"github.com/mafi020/ecom-golang-micro/internal/logger"
 	cartpb "github.com/mafi020/ecom-golang-micro/proto/cart"
 	"github.com/mafi020/ecom-golang-micro/rpc_client"
 	"google.golang.org/grpc"
@@ -28,8 +28,6 @@ type CartApp struct {
 
 func InitializeCartApp() *CartApp {
 	cfg := config.LoadConfig()
-	appLogger := logger.NewJSONLogger()
-	slog.SetDefault(appLogger)
 
 	cart_dsn := cfg.PostgresDSN(
 		cfg.Postgres.PgCartUser,
@@ -106,7 +104,10 @@ func (a *CartApp) RunGRPC() (*grpc.Server, error) {
 		return nil, fmt.Errorf("failed to bind grpc tcp socket: %w", err)
 	}
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(
+		// Logger for gRPC
+		grpc.UnaryInterceptor(utils.UnaryServerLoggerInterceptor()),
+	)
 
 	grpcHandler := handler.NewCartGRPCHandler(a.usecases.CartUC)
 	cartpb.RegisterCartServiceServer(srv, grpcHandler)

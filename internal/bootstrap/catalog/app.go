@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mafi020/ecom-golang-micro/config"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/handler"
+	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/utils"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
-	"github.com/mafi020/ecom-golang-micro/internal/logger"
 	catalogpb "github.com/mafi020/ecom-golang-micro/proto/catalog"
 	"google.golang.org/grpc"
 )
@@ -26,8 +26,6 @@ type CatalogApp struct {
 
 func InitializeCatalogApp() *CatalogApp {
 	cfg := config.LoadConfig()
-	appLogger := logger.NewJSONLogger()
-	slog.SetDefault(appLogger)
 	catalog_dsn := cfg.PostgresDSN(cfg.Postgres.PgCatalogUser, cfg.Postgres.PgCatalogPassword, cfg.Postgres.PgCatalogHost, cfg.Postgres.PgCatalogDBName, cfg.Postgres.PgCatalogPort)
 
 	db := infrastructure.NewPostgresDB(catalog_dsn, cfg.Postgres.PgCatalogDBName)
@@ -88,7 +86,10 @@ func (a *CatalogApp) RunGRPC() (*grpc.Server, error) {
 		return nil, fmt.Errorf("failed to bind grpc tcp socket: %w", err)
 	}
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(
+		// Logger for gRPC
+		grpc.UnaryInterceptor(utils.UnaryServerLoggerInterceptor()),
+	)
 
 	// Create handler structure passing down needed usecases context
 	grpcHandler := handler.NewCatalogGRPCServer(a.usecases.ProductUC)

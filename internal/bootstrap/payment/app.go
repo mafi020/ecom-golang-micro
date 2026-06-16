@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mafi020/ecom-golang-micro/config"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/handler"
+	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/utils"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
-	"github.com/mafi020/ecom-golang-micro/internal/logger"
 	paymentpb "github.com/mafi020/ecom-golang-micro/proto/payment"
 	"github.com/mafi020/ecom-golang-micro/rpc_client"
 	"google.golang.org/grpc"
@@ -28,8 +28,7 @@ type PaymentApp struct {
 
 func InitializePaymentApp() *PaymentApp {
 	cfg := config.LoadConfig()
-	appLogger := logger.NewJSONLogger()
-	slog.SetDefault(appLogger)
+
 	payment_dsn := cfg.PostgresDSN(cfg.Postgres.PgPaymentUser, cfg.Postgres.PgPaymentPassword, cfg.Postgres.PgPaymentHost, cfg.Postgres.PgPaymentDBName, cfg.Postgres.PgPaymentPort)
 
 	db := infrastructure.NewPostgresDB(payment_dsn, cfg.Postgres.PgPaymentDBName)
@@ -101,7 +100,10 @@ func (a *PaymentApp) RunGRPC() (*grpc.Server, error) {
 		return nil, fmt.Errorf("failed to bind grpc tcp socket: %w", err)
 	}
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(
+		// Logger for gRPC
+		grpc.UnaryInterceptor(utils.UnaryServerLoggerInterceptor()),
+	)
 
 	grpcHandler := handler.NewPaymentGRPCHandler(a.usecases.PaymentUC)
 	paymentpb.RegisterPaymentServiceServer(srv, grpcHandler)

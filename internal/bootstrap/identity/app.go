@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mafi020/ecom-golang-micro/config"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/handler"
+	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/utils"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
-	"github.com/mafi020/ecom-golang-micro/internal/logger"
 	identitypb "github.com/mafi020/ecom-golang-micro/proto/identity"
 	"google.golang.org/grpc"
 )
@@ -26,9 +26,6 @@ type IdentityApp struct {
 
 func InitializeIdentityApp() *IdentityApp {
 	cfg := config.LoadConfig()
-
-	appLogger := logger.NewJSONLogger()
-	slog.SetDefault(appLogger)
 
 	identity_dsn := cfg.PostgresDSN(cfg.Postgres.PgIdentityUser,
 		cfg.Postgres.PgIdentityPassword,
@@ -97,7 +94,10 @@ func (a *IdentityApp) RunGRPC() (*grpc.Server, error) {
 		return nil, fmt.Errorf("failed to bind grpc tcp socket: %w", err)
 	}
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(
+		// Logger for gRPC
+		grpc.UnaryInterceptor(utils.UnaryServerLoggerInterceptor()),
+	)
 
 	// Create handler structure passing down needed usecases context
 	grpcHandler := handler.NewIdentityGRPCHandler(a.usecases.UserUC)

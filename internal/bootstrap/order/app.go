@@ -12,8 +12,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mafi020/ecom-golang-micro/config"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/handler"
+	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/utils"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
-	"github.com/mafi020/ecom-golang-micro/internal/logger"
 	orderpb "github.com/mafi020/ecom-golang-micro/proto/order"
 	"github.com/mafi020/ecom-golang-micro/rpc_client"
 	"google.golang.org/grpc"
@@ -28,8 +28,6 @@ type OrderApp struct {
 
 func InitializeOrderApp() *OrderApp {
 	cfg := config.LoadConfig()
-	appLogger := logger.NewJSONLogger()
-	slog.SetDefault(appLogger)
 	order_dsn := cfg.PostgresDSN(cfg.Postgres.PgOrderUser, cfg.Postgres.PgOrderPassword, cfg.Postgres.PgOrderHost, cfg.Postgres.PgOrderDBName, cfg.Postgres.PgOrderPort)
 
 	db := infrastructure.NewPostgresDB(order_dsn, cfg.Postgres.PgOrderDBName)
@@ -102,7 +100,10 @@ func (a *OrderApp) RunGRPC() (*grpc.Server, error) {
 		return nil, fmt.Errorf("failed to bind grpc tcp socket: %w", err)
 	}
 
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(
+		// Logger for gRPC
+		grpc.UnaryInterceptor(utils.UnaryServerLoggerInterceptor()),
+	)
 
 	// Create handler structure passing down needed usecases context
 	grpcHandler := handler.NewOrderGRPCHandler(a.usecases.OrderUC)
