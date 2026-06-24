@@ -12,8 +12,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/mafi020/ecom-golang-micro/config"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/handler"
-	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/utils"
+	grpc_utils "github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/utils"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
+	"github.com/mafi020/ecom-golang-micro/internal/utils"
 	paymentpb "github.com/mafi020/ecom-golang-micro/proto/payment"
 	"github.com/mafi020/ecom-golang-micro/rpc_client"
 	"google.golang.org/grpc"
@@ -29,7 +30,13 @@ type PaymentApp struct {
 func InitializePaymentApp() *PaymentApp {
 	cfg := config.LoadConfig()
 
-	payment_dsn := cfg.PostgresDSN(cfg.Postgres.PgPaymentUser, cfg.Postgres.PgPaymentPassword, cfg.Postgres.PgPaymentHost, cfg.Postgres.PgPaymentDBName, cfg.Postgres.PgPaymentPort)
+	payment_dsn := cfg.PostgresDSN(
+		cfg.Postgres.PgPaymentUser,
+		cfg.Postgres.PgPaymentPassword,
+		cfg.Postgres.PgPaymentHost,
+		cfg.Postgres.PgPaymentDBName,
+		cfg.Postgres.PgPaymentPort,
+	)
 
 	db := infrastructure.NewPostgresDB(payment_dsn, cfg.Postgres.PgPaymentDBName)
 
@@ -49,8 +56,14 @@ func InitializePaymentApp() *PaymentApp {
 
 	transactor := infrastructure.NewPostgresTransactor(db)
 
+	broker, err := utils.NewEventBroker(cfg.Server.RabbitMqURL)
+	if err != nil {
+		slog.Error("Failed to initialize RabbitMQ Event Broker", slog.Any("error", err))
+		panic(err)
+	}
+
 	repos := RegisterRepositories(db)
-	usecases := RegisterUsecases(repos, transactor, cfg, rpcPool)
+	usecases := RegisterUsecases(repos, transactor, cfg, rpcPool, broker)
 
 	return &PaymentApp{db: db, config: cfg, usecases: usecases, rpcPool: rpcPool}
 }
@@ -102,7 +115,7 @@ func (a *PaymentApp) RunGRPC() (*grpc.Server, error) {
 
 	srv := grpc.NewServer(
 		// Logger for gRPC
-		grpc.UnaryInterceptor(utils.UnaryServerLoggerInterceptor()),
+		grpc.UnaryInterceptor(grpc_utils.UnaryServerLoggerInterceptor()),
 	)
 
 	grpcHandler := handler.NewPaymentGRPCHandler(a.usecases.PaymentUC)

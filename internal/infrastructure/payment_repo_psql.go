@@ -21,9 +21,9 @@ func NewPostgresPaymentRepository(db *sql.DB) *PostgresPaymentRepository {
 // Create persists the core ledger entry using our universal internal transaction UUID
 func (r *PostgresPaymentRepository) Create(ctx context.Context, payment *entity.Payment) (*entity.Payment, error) {
 	query := `
-		INSERT INTO payments (order_id, transaction_id, method, status, amount)
+		INSERT INTO payments (order_id, transaction_id, method, status, amount_cents)
 		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, order_id, transaction_id, method, status, amount, created_at, updated_at
+		RETURNING id, order_id, transaction_id, method, status, amount_cents, created_at, updated_at
 	`
 
 	err := r.db.QueryRowContext(ctx, query,
@@ -31,14 +31,14 @@ func (r *PostgresPaymentRepository) Create(ctx context.Context, payment *entity.
 		payment.TransactionID, // Universal identity reference mapping
 		payment.Method,
 		payment.Status,
-		payment.Amount,
+		payment.AmountCents,
 	).Scan(
 		&payment.ID,
 		&payment.OrderID,
 		&payment.TransactionID,
 		&payment.Method,
 		&payment.Status,
-		&payment.Amount,
+		&payment.AmountCents,
 		&payment.CreatedAt,
 		&payment.UpdatedAt,
 	)
@@ -134,7 +134,7 @@ func (r *PostgresPaymentRepository) CreateCODDetail(ctx context.Context, detail 
 // GetPaymentByOrderID fetches payment metadata using a single row scan
 func (r *PostgresPaymentRepository) GetPaymentByOrderID(ctx context.Context, orderID int64) (*entity.Payment, error) {
 	query := `
-		SELECT p.id, p.order_id, p.transaction_id, p.method, p.status, p.amount, p.created_at, p.updated_at,
+		SELECT p.id, p.order_id, p.transaction_id, p.method, p.status, p.amount_cents, p.created_at, p.updated_at,
 			   ot.id, ot.provider, ot.gateway_ref, ot.gateway_status, ot.raw_response, ot.created_at,
 			   cd.id, cd.collected_at, cd.created_at, cd.updated_at
 		FROM payments p
@@ -188,7 +188,7 @@ func (r *PostgresPaymentRepository) GetPaymentByOrderID(ctx context.Context, ord
 		TransactionID: txUUID,
 		Method:        entity.PaymentMethod(paymentMethod),
 		Status:        entity.PaymentStatus(paymentStatus),
-		Amount:        paymentAmount,
+		AmountCents:   paymentAmount,
 		CreatedAt:     paymentCA.Time,
 		UpdatedAt:     paymentUA.Time,
 	}

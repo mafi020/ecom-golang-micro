@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"log/slog"
+
 	"github.com/gin-gonic/gin"
 	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/http/request"
@@ -21,6 +23,7 @@ func NewCategoryHandler(categoryUseCase *usecase.CategoryUseCase) *CategoryHandl
 func (h *CategoryHandler) CreateCategory(c *gin.Context) {
 	var body request.CategoryRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
+		slog.Error("create category validation failed", slog.Any("error", err))
 		utils.HandleError(c, apperrors.ParseValidationError(err))
 		return
 	}
@@ -28,6 +31,7 @@ func (h *CategoryHandler) CreateCategory(c *gin.Context) {
 	category, err := h.categoryUseCase.CreateCategory(c.Request.Context(), body.Name, body.ParentID)
 
 	if err != nil {
+		slog.Error("failed to create category", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -39,12 +43,14 @@ func (h *CategoryHandler) GetCategoryByID(c *gin.Context) {
 
 	id, err := utils.ParseID(c, "id")
 	if err != nil {
+		slog.Error("failed to parse category ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"category": "Invalid Category ID"}})
 		return
 	}
 
 	category, err := h.categoryUseCase.GetCategoryByID(c.Request.Context(), id)
 	if err != nil {
+		slog.Error("failed to get category", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -55,12 +61,14 @@ func (h *CategoryHandler) GetCategoryByID(c *gin.Context) {
 func (h *CategoryHandler) GetCategoryByIDWithProducts(c *gin.Context) {
 	id, err := utils.ParseID(c, "id")
 	if err != nil {
+		slog.Error("failed to parse category ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"category": "Invalid Category ID"}})
 		return
 	}
 
 	category, err := h.categoryUseCase.GetCategoryByIDWithProducts(c.Request.Context(), id)
 	if err != nil {
+		slog.Error("failed to GetCategoryByIDWithProducts", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -69,22 +77,22 @@ func (h *CategoryHandler) GetCategoryByIDWithProducts(c *gin.Context) {
 }
 
 func (h *CategoryHandler) GetAllCategories(c *gin.Context) {
-	// 1. Get the raw string first to check if it exists
-	parentIDStr := c.Query("parent_id") // Or c.Param("parent_id") depending on your routing
+	parentIDStr := c.Query("parent_id")
 
-	var parentID int64 // Change type (e.g., *string, *uint) to match your application
+	var parentID int64
 	var err error
 
 	if parentIDStr != "" {
 		// 2. Only parse if the string is actually present
 		parsedID, err := utils.ParseID(c, "parent_id")
 		if err != nil {
+			slog.Error("failed to parse parent categiry ID", slog.Any("error", err))
 			utils.HandleError(c, &apperrors.BadRequestError{
 				Errors: map[string]string{"category": "Invalid Category ID"},
 			})
 			return
 		}
-		parentID = parsedID // Assign the value to your variable
+		parentID = parsedID
 	}
 
 	params := entity.GetCategoriesParams{
@@ -95,6 +103,7 @@ func (h *CategoryHandler) GetAllCategories(c *gin.Context) {
 	categories, total, err := h.categoryUseCase.GetAllCategories(c.Request.Context(), params)
 
 	if err != nil {
+		slog.Error("failed to get all categories", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -106,12 +115,14 @@ func (h *CategoryHandler) UpdateCategory(c *gin.Context) {
 
 	id, err := utils.ParseID(c, "id")
 	if err != nil {
+		slog.Error("failed to parse category ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"category": "Invalid Category ID"}})
 		return
 	}
 
 	var body request.CategoryRequest
 	if err := c.ShouldBindJSON(&body); err != nil {
+		slog.Error("update category validation failed", slog.Any("error", err))
 		utils.HandleError(c, apperrors.ParseValidationError(err))
 		return
 	}
@@ -124,6 +135,7 @@ func (h *CategoryHandler) UpdateCategory(c *gin.Context) {
 	}
 
 	if err := h.categoryUseCase.UpdateCategory(c.Request.Context(), category); err != nil {
+		slog.Error("failed to update category", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -134,12 +146,14 @@ func (h *CategoryHandler) UpdateCategory(c *gin.Context) {
 func (h *CategoryHandler) DeleteCategory(c *gin.Context) {
 	id, err := utils.ParseID(c, "id")
 	if err != nil {
+		slog.Error("failed to parse category ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"category": "Invalid Category ID"}})
 		return
 	}
 
 	err = h.categoryUseCase.DeleteCategory(c.Request.Context(), id)
 	if err != nil {
+		slog.Error("failed to delete category", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}

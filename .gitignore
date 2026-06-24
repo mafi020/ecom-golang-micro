@@ -26,8 +26,22 @@ go.work.sum
 
 # env file
 .env
+.env.*
 
-# Editor/IDE
-# .idea/
-# .vscode/
+# Editor/IDE and OS files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+.DS_Store
+
+# Local development artifacts
 notes.txt
+structure.txt
+bin/
+dist/
+tmp/
+.air/

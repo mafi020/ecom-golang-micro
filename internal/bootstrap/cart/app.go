@@ -11,9 +11,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mafi020/ecom-golang-micro/config"
+	event_delivery "github.com/mafi020/ecom-golang-micro/internal/delivery/events"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/handler"
-	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/utils"
+	grpc_utils "github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/utils"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
+	"github.com/mafi020/ecom-golang-micro/internal/utils"
 	cartpb "github.com/mafi020/ecom-golang-micro/proto/cart"
 	"github.com/mafi020/ecom-golang-micro/rpc_client"
 	"google.golang.org/grpc"
@@ -24,6 +26,7 @@ type CartApp struct {
 	config   *config.Config
 	usecases *Usecases
 	rpcPool  *rpc_client.Clients
+	broker   *utils.EventBroker
 }
 
 func InitializeCartApp() *CartApp {
@@ -53,10 +56,21 @@ func InitializeCartApp() *CartApp {
 		panic(err)
 	}
 
+	broker, err := utils.NewEventBroker(cfg.Server.RabbitMqURL)
+	if err != nil {
+		slog.Error("Failed to initialize RabbitMQ Event Broker", slog.Any("error", err))
+		panic(err)
+	}
 	repos := RegisterRepositories(db)
-	usecases := RegisterUsecases(repos, cfg, rpcPool.Catalog)
+	usecases := RegisterUsecases(repos, cfg, rpcPool.Catalog, broker)
 
-	return &CartApp{db: db, config: cfg, usecases: usecases, rpcPool: rpcPool}
+	// 🚀 NEW: Instantiate and activate the asynchronous background listener
+	consumer := event_delivery.NewCartEventConsumer(broker, usecases.CartUC)
+	if err := consumer.StartListening(); err != nil {
+		slog.Error("Failed to initiate Cart background worker listener loops", slog.Any("error", err))
+	}
+
+	return &CartApp{db: db, config: cfg, usecases: usecases, rpcPool: rpcPool, broker: broker}
 }
 
 func (a *CartApp) RunHTTP() (*http.Server, error) {
@@ -106,7 +120,7 @@ func (a *CartApp) RunGRPC() (*grpc.Server, error) {
 
 	srv := grpc.NewServer(
 		// Logger for gRPC
-		grpc.UnaryInterceptor(utils.UnaryServerLoggerInterceptor()),
+		grpc.UnaryInterceptor(grpc_utils.UnaryServerLoggerInterceptor()),
 	)
 
 	grpcHandler := handler.NewCartGRPCHandler(a.usecases.CartUC)

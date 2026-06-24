@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
@@ -32,6 +33,7 @@ func (h *PaymentHandler) PayOnline(c *gin.Context) {
 	var req request.PayOnlineRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("pay online validation failed", slog.Any("error", err))
 		utils.HandleError(c, apperrors.ParseValidationError(err))
 		return
 	}
@@ -46,6 +48,7 @@ func (h *PaymentHandler) PayOnline(c *gin.Context) {
 		req.RawResponse,
 	)
 	if err != nil {
+		slog.Error("failed to pay online", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -63,6 +66,7 @@ func (h *PaymentHandler) PayCOD(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("pay COD validation failed", slog.Any("error", err))
 		utils.HandleError(c, apperrors.ParseValidationError(err))
 		return
 	}
@@ -70,6 +74,7 @@ func (h *PaymentHandler) PayCOD(c *gin.Context) {
 	payment, err := h.paymentUsecase.PayCOD(c.Request.Context(), userID, req.OrderID)
 
 	if err != nil {
+		slog.Error("failed to PayCOD", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -77,16 +82,17 @@ func (h *PaymentHandler) PayCOD(c *gin.Context) {
 	response.Created(c, payment)
 }
 
-// Admin only
 func (h *PaymentHandler) CollectCOD(c *gin.Context) {
 	orderID, err := utils.ParseID(c, "order_id")
 	if err != nil {
+		slog.Error("failed to parse order ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"order": "Invalid Order ID"}})
 		return
 	}
 
 	payment, err := h.paymentUsecase.CollectCOD(c.Request.Context(), orderID)
 	if err != nil {
+		slog.Error("failed to CollectCOD", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -99,12 +105,14 @@ func (h *PaymentHandler) GetPaymentByOrderID(c *gin.Context) {
 
 	orderID, err := utils.ParseID(c, "order_id")
 	if err != nil {
+		slog.Error("failed to parse order ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"order": "Invalid Order ID"}})
 		return
 	}
 
 	payment, err := h.paymentUsecase.GetPaymentByOrderID(c.Request.Context(), orderID, userID)
 	if err != nil {
+		slog.Error("failed to GetPaymentByOrderID", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}

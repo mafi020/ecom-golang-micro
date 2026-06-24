@@ -3,11 +3,14 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
 	"github.com/mafi020/ecom-golang-micro/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/utils"
+	"github.com/mafi020/ecom-golang-micro/pkg/events"
 	orderpb "github.com/mafi020/ecom-golang-micro/proto/order"
 )
 
@@ -28,13 +31,15 @@ type PaymentUseCase struct {
 	paymentRepo paymentRepo
 	orderClient orderpb.OrderServiceClient
 	tm          tm
+	broker      *utils.EventBroker
 }
 
-func NewPaymentUseCase(paymentRepo paymentRepo, orderClient orderpb.OrderServiceClient, tm tm) *PaymentUseCase {
+func NewPaymentUseCase(paymentRepo paymentRepo, orderClient orderpb.OrderServiceClient, tm tm, broker *utils.EventBroker) *PaymentUseCase {
 	return &PaymentUseCase{
 		paymentRepo: paymentRepo,
 		orderClient: orderClient,
 		tm:          tm,
+		broker:      broker,
 	}
 }
 
@@ -75,7 +80,7 @@ func (uc *PaymentUseCase) PayOnline(
 			TransactionID: txUUID,
 			Method:        entity.PaymentMethodOnline,
 			Status:        entity.PaymentStatusCompleted,
-			Amount:        orderProto.GetTotalPrice(), // Uses gRPC response price field
+			AmountCents:   orderProto.GetTotalPrice(), // Uses gRPC response price field
 		})
 		if err != nil {
 			return err
@@ -98,15 +103,18 @@ func (uc *PaymentUseCase) PayOnline(
 		return nil, err
 	}
 
-	// 3. Update Order fulfillment state over the network via gRPC
-	_, err = uc.orderClient.UpdateStatus(ctx, &orderpb.UpdateStatusRequest{
-		OrderId: orderProto.GetId(),
-		Status:  orderpb.OrderStatus_ORDER_STATUS_PAID,
-	})
-	if err != nil {
-		// In production microservices, if this network call fails after payment succeeds,
-		// you would ideally trigger a compensatory action, queue an outbox message, or return an error.
-		return payment, fmt.Errorf("payment succeeded but failing to update order status: %w", err)
+	// 3. emit "paymet.completed" event
+	paymentEvent := events.PaymentCompletedEvent{
+		OrderID:       payment.OrderID,
+		UserID:        userID,
+		TransactionID: payment.TransactionID,
+		AmountCents:   payment.AmountCents,
+	}
+
+	// Broadcast token safely onto the network queue channel
+	if err := uc.broker.Publish(ctx, "payment.completed", paymentEvent); err != nil {
+		// Log the warning, but return success to client because their ledger is already secure in DB
+		slog.Error("Reconciliation database record secured, but event broadcast missed", slog.Any("error", err))
 	}
 
 	return payment, nil
@@ -140,7 +148,7 @@ func (uc *PaymentUseCase) PayCOD(ctx context.Context, userID, orderID int64) (*e
 			TransactionID: txUUID,
 			Method:        entity.PaymentMethodCOD,
 			Status:        entity.PaymentStatusPending,
-			Amount:        orderProto.GetTotalPrice(),
+			AmountCents:   orderProto.GetTotalPrice(),
 		})
 		if err != nil {
 			return err
@@ -196,17 +204,29 @@ func (uc *PaymentUseCase) CollectCOD(ctx context.Context, orderID int64) (*entit
 		payment.Status = entity.PaymentStatusCompleted
 		return nil
 	})
+
 	if err != nil {
 		return nil, err
 	}
 
+	// Emit "payment.completed" event
 	// Progress order state machine remotely (shipped -> delivered)
-	_, err = uc.orderClient.UpdateStatus(ctx, &orderpb.UpdateStatusRequest{
-		OrderId: orderID,
-		Status:  orderpb.OrderStatus_ORDER_STATUS_PAID,
-	})
-	if err != nil {
-		return payment, fmt.Errorf("reconciliation completed but failing to transition order state: %w", err)
+	paymentEvent := events.PaymentCompletedEvent{
+		OrderID:       payment.OrderID,
+		TransactionID: payment.TransactionID,
+		AmountCents:   payment.AmountCents,
+	}
+
+	// paymentEvent := events.PaymentCompletedEvent{
+	// 	OrderID:       payment.OrderID,
+	// 	UserID:        userID,
+	// 	TransactionID: payment.TransactionID,
+	// 	AmountCents:   payment.AmountCents,
+	// }
+
+	// Broadcast transaction reconciliation event so order transitions to PAID/DELIVERED asynchronously
+	if err := uc.broker.Publish(ctx, "payment.completed", paymentEvent); err != nil {
+		slog.Error("COD collected locally, but async event distribution missed", slog.Any("error", err))
 	}
 
 	return payment, nil

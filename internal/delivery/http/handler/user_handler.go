@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
@@ -24,10 +25,10 @@ func NewUserHandler(uc userUseCase) *UserHandler {
 	return &UserHandler{userUsecase: uc}
 }
 
-// GET /users/:id
 func (h *UserHandler) GetUserByID(c *gin.Context) {
 	id, err := utils.ParseID(c, "id")
 	if err != nil {
+		slog.Error("failed to parse user ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"user": "Invalid User ID"}})
 		return
 	}
@@ -35,6 +36,7 @@ func (h *UserHandler) GetUserByID(c *gin.Context) {
 	user, err := h.userUsecase.GetUserByID(c.Request.Context(), id)
 
 	if err != nil {
+		slog.Error("failed to GetUserByID", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -58,12 +60,13 @@ func (h *UserHandler) GetUsers(c *gin.Context) {
 
 	users, total, err := h.userUsecase.GetUsers(c.Request.Context(), params)
 	if err != nil {
+		slog.Error("failed to GetUsers", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
 
 	if len(users) == 0 {
-		users = []entity.User{} // Return empty array instead of null
+		users = []entity.User{}
 	}
 
 	response.Paginated(c, users, total, params.Page, params.Limit)
@@ -73,6 +76,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 
 	id, err := utils.ParseID(c, "id")
 	if err != nil {
+		slog.Error("failed to parse user ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"user": "Invalid User ID"}})
 		return
 	}
@@ -85,6 +89,7 @@ func (h *UserHandler) DeleteUser(c *gin.Context) {
 
 	err = h.userUsecase.DeleteUser(c.Request.Context(), id)
 	if err != nil {
+		slog.Error("failed to delete user", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}

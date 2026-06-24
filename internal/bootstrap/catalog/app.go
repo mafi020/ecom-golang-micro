@@ -11,9 +11,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mafi020/ecom-golang-micro/config"
+	event_delivery "github.com/mafi020/ecom-golang-micro/internal/delivery/events"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/handler"
-	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/utils"
+	grpc_utils "github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/utils"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
+	"github.com/mafi020/ecom-golang-micro/internal/utils"
 	catalogpb "github.com/mafi020/ecom-golang-micro/proto/catalog"
 	"google.golang.org/grpc"
 )
@@ -22,6 +24,7 @@ type CatalogApp struct {
 	db       *sql.DB
 	config   *config.Config
 	usecases *Usecases
+	broker   *utils.EventBroker
 }
 
 func InitializeCatalogApp() *CatalogApp {
@@ -35,8 +38,19 @@ func InitializeCatalogApp() *CatalogApp {
 		panic(err)
 	}
 
+	broker, err := utils.NewEventBroker(cfg.Server.RabbitMqURL)
+	if err != nil {
+		slog.Error("Failed to initialize RabbitMQ Event Broker", slog.Any("error", err))
+		panic(err)
+	}
+
 	repos := RegisterRepositories(db)
-	usecases := RegisterUsecases(repos, cfg)
+	usecases := RegisterUsecases(repos, cfg, broker)
+
+	consumer := event_delivery.NewCatalogEventConsumer(broker, usecases.ProductUC)
+	if err := consumer.StartListening(); err != nil {
+		slog.Error("Failed to launch Catalog background consumer loops", slog.Any("error", err))
+	}
 
 	return &CatalogApp{db: db, config: cfg, usecases: usecases}
 }
@@ -88,7 +102,7 @@ func (a *CatalogApp) RunGRPC() (*grpc.Server, error) {
 
 	srv := grpc.NewServer(
 		// Logger for gRPC
-		grpc.UnaryInterceptor(utils.UnaryServerLoggerInterceptor()),
+		grpc.UnaryInterceptor(grpc_utils.UnaryServerLoggerInterceptor()),
 	)
 
 	// Create handler structure passing down needed usecases context

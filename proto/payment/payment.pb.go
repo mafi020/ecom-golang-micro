@@ -185,7 +185,7 @@ type Payment struct {
 	TransactionId string                 `protobuf:"bytes,3,opt,name=transaction_id,json=transactionId,proto3" json:"transaction_id,omitempty"`
 	Method        PaymentMethod          `protobuf:"varint,4,opt,name=method,proto3,enum=payment.PaymentMethod" json:"method,omitempty"`
 	Status        PaymentStatus          `protobuf:"varint,5,opt,name=status,proto3,enum=payment.PaymentStatus" json:"status,omitempty"`
-	Amount        int64                  `protobuf:"varint,6,opt,name=amount,proto3" json:"amount,omitempty"`
+	AmountCents   int64                  `protobuf:"varint,6,opt,name=amount_cents,json=amountCents,proto3" json:"amount_cents,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// Types that are valid to be assigned to Details:
@@ -262,9 +262,9 @@ func (x *Payment) GetStatus() PaymentStatus {
 	return PaymentStatus_PAYMENT_STATUS_UNSPECIFIED
 }
 
-func (x *Payment) GetAmount() int64 {
+func (x *Payment) GetAmountCents() int64 {
 	if x != nil {
-		return x.Amount
+		return x.AmountCents
 	}
 	return 0
 }
@@ -772,14 +772,14 @@ var File_payment_proto protoreflect.FileDescriptor
 
 const file_payment_proto_rawDesc = "" +
 	"\n" +
-	"\rpayment.proto\x12\apayment\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd6\x03\n" +
+	"\rpayment.proto\x12\apayment\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe1\x03\n" +
 	"\aPayment\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
 	"\border_id\x18\x02 \x01(\x03R\aorderId\x12%\n" +
 	"\x0etransaction_id\x18\x03 \x01(\tR\rtransactionId\x12.\n" +
 	"\x06method\x18\x04 \x01(\x0e2\x16.payment.PaymentMethodR\x06method\x12.\n" +
-	"\x06status\x18\x05 \x01(\x0e2\x16.payment.PaymentStatusR\x06status\x12\x16\n" +
-	"\x06amount\x18\x06 \x01(\x03R\x06amount\x129\n" +
+	"\x06status\x18\x05 \x01(\x0e2\x16.payment.PaymentStatusR\x06status\x12!\n" +
+	"\famount_cents\x18\x06 \x01(\x03R\vamountCents\x129\n" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +

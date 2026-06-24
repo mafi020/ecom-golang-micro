@@ -11,9 +11,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mafi020/ecom-golang-micro/config"
+	event_delivery "github.com/mafi020/ecom-golang-micro/internal/delivery/events"
 	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/handler"
-	"github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/utils"
+	grpc_utils "github.com/mafi020/ecom-golang-micro/internal/delivery/gRPC/utils"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
+	"github.com/mafi020/ecom-golang-micro/internal/utils"
 	orderpb "github.com/mafi020/ecom-golang-micro/proto/order"
 	"github.com/mafi020/ecom-golang-micro/rpc_client"
 	"google.golang.org/grpc"
@@ -24,11 +26,18 @@ type OrderApp struct {
 	config   *config.Config
 	usecases *Usecases
 	rpcPool  *rpc_client.Clients
+	broker   *utils.EventBroker
 }
 
 func InitializeOrderApp() *OrderApp {
 	cfg := config.LoadConfig()
-	order_dsn := cfg.PostgresDSN(cfg.Postgres.PgOrderUser, cfg.Postgres.PgOrderPassword, cfg.Postgres.PgOrderHost, cfg.Postgres.PgOrderDBName, cfg.Postgres.PgOrderPort)
+	order_dsn := cfg.PostgresDSN(
+		cfg.Postgres.PgOrderUser,
+		cfg.Postgres.PgOrderPassword,
+		cfg.Postgres.PgOrderHost,
+		cfg.Postgres.PgOrderDBName,
+		cfg.Postgres.PgOrderPort,
+	)
 
 	db := infrastructure.NewPostgresDB(order_dsn, cfg.Postgres.PgOrderDBName)
 
@@ -49,10 +58,23 @@ func InitializeOrderApp() *OrderApp {
 
 	transactor := infrastructure.NewPostgresTransactor(db)
 
-	repos := RegisterRepositories(db)
-	usecases := RegisterUsecases(repos, transactor, cfg, rpcPool)
+	broker, err := utils.NewEventBroker(cfg.Server.RabbitMqURL)
+	if err != nil {
+		slog.Error("Failed to initialize RabbitMQ Event Broker", slog.Any("error", err))
+		panic(err)
+	}
 
-	return &OrderApp{db: db, config: cfg, usecases: usecases, rpcPool: rpcPool}
+	repos := RegisterRepositories(db)
+	usecases := RegisterUsecases(repos, transactor, cfg, rpcPool, broker)
+
+	// 2. Initialize and spawn the background event processing consumer loop
+	consumer := event_delivery.NewOrderEventConsumer(broker, usecases.OrderUC)
+	if err := consumer.StartListening(); err != nil {
+		slog.Error("Failed to initiate background worker processing loops", slog.Any("error", err))
+		panic(err)
+	}
+
+	return &OrderApp{db: db, config: cfg, usecases: usecases, rpcPool: rpcPool, broker: broker}
 }
 
 func (a *OrderApp) RunHTTP() (*http.Server, error) {
@@ -102,7 +124,7 @@ func (a *OrderApp) RunGRPC() (*grpc.Server, error) {
 
 	srv := grpc.NewServer(
 		// Logger for gRPC
-		grpc.UnaryInterceptor(utils.UnaryServerLoggerInterceptor()),
+		grpc.UnaryInterceptor(grpc_utils.UnaryServerLoggerInterceptor()),
 	)
 
 	// Create handler structure passing down needed usecases context
@@ -124,6 +146,7 @@ func (a *OrderApp) RunGRPC() (*grpc.Server, error) {
 func (a *OrderApp) ShutdownGRPC(srv *grpc.Server) error {
 	defer a.db.Close()
 	defer a.rpcPool.Close()
+	defer a.broker.Close()
 	slog.Info("Shutting down Order grpc server...")
 
 	// GracefulStop waits for all active connections and RPC requests to finish processing

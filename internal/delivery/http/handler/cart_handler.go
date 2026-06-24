@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -44,6 +45,7 @@ func (h *CartHandler) AddItem(c *gin.Context) {
 
 	var req request.CartItemRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("cart item validation failed", slog.Any("error", err))
 		utils.HandleError(c, apperrors.ParseValidationError(err))
 		return
 	}
@@ -52,6 +54,7 @@ func (h *CartHandler) AddItem(c *gin.Context) {
 
 	cart, err := h.cartUsecase.AddItem(c.Request.Context(), userID, req.ProductID, req.Quantity)
 	if err != nil {
+		slog.Error("failed to add item", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -62,6 +65,7 @@ func (h *CartHandler) AddItem(c *gin.Context) {
 func (h *CartHandler) UpdateItem(c *gin.Context) {
 	productID, err := utils.ParseID(c, "product_id")
 	if err != nil {
+		slog.Error("failed to parse product ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"product": "Invalid Product ID"}})
 		return
 	}
@@ -71,6 +75,7 @@ func (h *CartHandler) UpdateItem(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("upate item validation failed", slog.Any("error", err))
 		utils.HandleError(c, apperrors.ParseValidationError(err))
 		return
 	}
@@ -79,6 +84,7 @@ func (h *CartHandler) UpdateItem(c *gin.Context) {
 
 	cart, err := h.cartUsecase.UpdateItem(c.Request.Context(), userID, productID, req.Quantity)
 	if err != nil {
+		slog.Error("failed to update item", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -90,6 +96,7 @@ func (h *CartHandler) RemoveItem(c *gin.Context) {
 
 	productID, err := utils.ParseID(c, "product_id")
 	if err != nil {
+		slog.Error("failed to prse product ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"product": "Invalid Product ID"}})
 		return
 	}
@@ -97,6 +104,7 @@ func (h *CartHandler) RemoveItem(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 	cart, err := h.cartUsecase.RemoveItem(c.Request.Context(), userID, productID)
 	if err != nil {
+		slog.Error("failed to remove item", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -108,6 +116,7 @@ func (h *CartHandler) ClearCart(c *gin.Context) {
 	userID := c.GetInt64("user_id")
 
 	if err := h.cartUsecase.ClearCart(c.Request.Context(), userID); err != nil {
+		slog.Error("failed to clear cart", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}

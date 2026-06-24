@@ -36,7 +36,7 @@ type Payment struct {
 	TransactionID string        `json:"transaction_id"`
 	Method        PaymentMethod `json:"method"`
 	Status        PaymentStatus `json:"status"`
-	Amount        int64         `json:"amount"`
+	AmountCents   int64         `json:"amount_cents"`
 	CreatedAt     time.Time     `json:"created_at"`
 	UpdatedAt     time.Time     `json:"updated_at"`
 

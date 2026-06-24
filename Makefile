@@ -1,7 +1,7 @@
 include .env
 
 
-.PHONY: clean prepare kill reset restart dev-gateway dev-catalog dev-cart dev-order dev-payment dev-identity install-golang-migrate migration-version migration migrate-up migrate-down migrate-reset migrate-force proto-clean proto-gen
+.PHONY: clean prepare kill reset restart dev-gateway dev-catalog dev-cart dev-order dev-payment dev-identity install-golang-migrate migration-version migration migrate-up migrate-down migrate-reset migrate-force proto-clean proto-gen docker-build-seq docker-up docker-up-d docker-rebuild docker-down docker-reset docker-logs
 
 # --- DYNAMIC DATABASE MIGRATION STRATEGY ---
 
@@ -128,3 +128,42 @@ proto-gen: proto-clean
 		--go-grpc_out=. --go-grpc_opt=module=github.com/mafi020/ecom-golang-micro \
 		$(PROTO_DIR)/*.proto
 	@echo "Successfully compiled Protobuf contracts into [$(PROTO_GEN_OUT)]!"
+
+
+# Docker
+
+# ── DOCKER LIFECYCLE COMMANDS ─────────────────────────────────────────────────
+
+DOCKER_SERVICES = identity-service catalog-service cart-service order-service payment-service api-gateway
+
+# Build each service image one at a time — avoids 6 parallel Go compiles
+# fighting over the same CPU/RAM during the first build.
+docker-build-seq:
+	@for svc in $(DOCKER_SERVICES); do \
+		echo "==> Building $$svc..."; \
+		docker compose build $$svc || exit 1; \
+	done
+	@echo "All service images built successfully."
+
+# Start the stack from already-built images (no rebuild).
+docker-up:
+	docker compose up
+
+# Start the stack detached.
+docker-up-d:
+	docker compose up -d
+
+# One-shot replacement for 'docker compose up --build' that won't hammer your CPU.
+docker-rebuild: docker-build-seq docker-up
+
+# Stop and remove containers, keep volumes (Postgres/RabbitMQ data survives).
+docker-down:
+	docker compose down
+
+# Full reset: stop containers AND wipe volumes — fresh databases next run.
+docker-reset:
+	docker compose down -v
+
+# Tail logs for everything, or one service: make docker-logs svc=order-service
+docker-logs:
+	docker compose logs -f $(svc)

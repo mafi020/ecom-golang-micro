@@ -2,6 +2,8 @@ package config
 
 import (
 	"log"
+	"reflect"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -9,6 +11,7 @@ import (
 type Config struct {
 	Server struct {
 		ENV            string `mapstructure:"ENV"`
+		RabbitMqURL    string `mapstructure:"RABBITMQ_URL"`
 		APIGatewayPort string `mapstructure:"API_GATEWAY_PORT"`
 
 		CatalogServiceHTTPPort string `mapstructure:"CATALOG_SERVICE_HTTP_PORT"`
@@ -77,14 +80,39 @@ func LoadConfig() *Config {
 	viper.SetConfigType("env")
 
 	if err := viper.ReadInConfig(); err != nil {
-		log.Fatalf("Error loading config: %v", err)
+		log.Println("No physical .env file found. Reading directly from system environment.")
 	}
 
+	viper.AutomaticEnv()
+
 	var cfg Config
+	bindEnvKeys(reflect.TypeOf(cfg))
+
 	// Unmarshal uses the mapstructure tags
 	if err := viper.Unmarshal(&cfg); err != nil {
 		log.Fatalf("Error unmarshalling config: %v", err)
 	}
 
 	return &cfg
+}
+
+func bindEnvKeys(t reflect.Type) {
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+
+		// If it's a nested struct with a squash tag, recursively look inside it
+		if field.Type.Kind() == reflect.Struct {
+			tag := field.Tag.Get("mapstructure")
+			if strings.Contains(tag, ",squash") {
+				bindEnvKeys(field.Type)
+			}
+			continue
+		}
+
+		// Get the mapstructure key name
+		key := field.Tag.Get("mapstructure")
+		if key != "" && key != ",squash" {
+			viper.BindEnv(key)
+		}
+	}
 }

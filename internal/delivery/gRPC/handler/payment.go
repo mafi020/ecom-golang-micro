@@ -98,7 +98,7 @@ func (h *PaymentGRPCHandler) toProtoPayment(p *entity.Payment) *paymentpb.Paymen
 		Id:            p.ID,
 		OrderId:       p.OrderID,
 		TransactionId: p.TransactionID,
-		Amount:        p.Amount,
+		AmountCents:   p.AmountCents,
 		CreatedAt:     timestamppb.New(p.CreatedAt),
 		UpdatedAt:     timestamppb.New(p.UpdatedAt),
 	}

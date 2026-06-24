@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"log"
+	"log/slog"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
@@ -24,6 +24,7 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 
 	var req request.CreateProduct
 	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("create product validation failed", slog.Any("error", err))
 		utils.HandleError(c, apperrors.ParseValidationError(err))
 		return
 	}
@@ -31,6 +32,7 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 	product := entity.NewProduct(req.Name, req.Description, req.PriceCents, req.Stock, req.CategoryID)
 
 	if err := h.productUsecase.Create(c.Request.Context(), product); err != nil {
+		slog.Error("failed to create product", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -41,6 +43,7 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 func (h *ProductHandler) GetProductByID(c *gin.Context) {
 	id, err := utils.ParseID(c, "id")
 	if err != nil {
+		slog.Error("failed to parse product ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"product": "Invalid Product ID"}})
 		return
 	}
@@ -48,7 +51,8 @@ func (h *ProductHandler) GetProductByID(c *gin.Context) {
 	product, err := h.productUsecase.GetByID(c.Request.Context(), id)
 
 	if err != nil {
-		log.Printf("Server Error: %v", err)
+
+		slog.Error("failed to GetByID", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -72,6 +76,7 @@ func (h *ProductHandler) GetProducts(c *gin.Context) {
 	products, total, err := h.productUsecase.List(c.Request.Context(), params)
 
 	if err != nil {
+		slog.Error("failed to get product List", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -86,6 +91,7 @@ func (h *ProductHandler) GetProducts(c *gin.Context) {
 func (h *ProductHandler) GetProductsByCategoryID(c *gin.Context) {
 	category_id, err := utils.ParseID(c, "category_id")
 	if err != nil {
+		slog.Error("failed to parse category ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"category": "Invalid Category ID"}})
 		return
 	}
@@ -100,6 +106,7 @@ func (h *ProductHandler) GetProductsByCategoryID(c *gin.Context) {
 	products, total, err := h.productUsecase.List(c.Request.Context(), params)
 
 	if err != nil {
+		slog.Error("failed to GetProductsByCategiryID", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -110,12 +117,14 @@ func (h *ProductHandler) GetProductsByCategoryID(c *gin.Context) {
 func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 	id, err := utils.ParseID(c, "id")
 	if err != nil {
+		slog.Error("failed to parse product ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"product": "Invalid Product ID"}})
 		return
 	}
 
 	var req request.UpdateProductRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Error("update product validation failed", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -129,6 +138,7 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 	})
 
 	if err != nil {
+		slog.Error("failed to update product", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}
@@ -139,11 +149,13 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 func (h *ProductHandler) DeleteProduct(c *gin.Context) {
 	id, err := utils.ParseID(c, "id")
 	if err != nil {
+		slog.Error("failed to parse product ID", slog.Any("error", err))
 		utils.HandleError(c, &apperrors.BadRequestError{Errors: map[string]string{"product": "Invalid Product ID"}})
 		return
 	}
 	err = h.productUsecase.Delete(c.Request.Context(), id)
 	if err != nil {
+		slog.Error("failed to delete product", slog.Any("error", err))
 		utils.HandleError(c, err)
 		return
 	}

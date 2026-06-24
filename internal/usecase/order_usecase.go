@@ -3,11 +3,14 @@ package usecase
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
 	"github.com/mafi020/ecom-golang-micro/internal/entity"
 	"github.com/mafi020/ecom-golang-micro/internal/logger"
+	"github.com/mafi020/ecom-golang-micro/internal/utils"
+	"github.com/mafi020/ecom-golang-micro/pkg/events"
 	cartpb "github.com/mafi020/ecom-golang-micro/proto/cart"
 	catalogpb "github.com/mafi020/ecom-golang-micro/proto/catalog"
 )
@@ -33,6 +36,7 @@ type OrderUseCase struct {
 	catalogClient catalogpb.CatalogServiceClient
 	cartClient    cartpb.CartServiceClient
 	tm            transactionManager
+	broker        *utils.EventBroker
 }
 
 func NewOrderUseCase(
@@ -41,6 +45,7 @@ func NewOrderUseCase(
 	catalogClient catalogpb.CatalogServiceClient,
 	cartClient cartpb.CartServiceClient,
 	tm transactionManager,
+	broker *utils.EventBroker,
 ) *OrderUseCase {
 	return &OrderUseCase{
 		orderRepo:     orderRepo,
@@ -48,6 +53,7 @@ func NewOrderUseCase(
 		catalogClient: catalogClient,
 		cartClient:    cartClient,
 		tm:            tm,
+		broker:        broker,
 	}
 }
 
@@ -60,6 +66,7 @@ func (uc *OrderUseCase) Checkout(ctx context.Context, userID int64) (*entity.Ord
 
 	cartResp, err := uc.cartClient.GetCart(cartCtx, &cartpb.GetCartRequest{UserId: userID})
 	if err != nil {
+		slog.Info("failed to fetch cart", slog.Any("err", err))
 		return nil, fmt.Errorf("failed to fetch cart: %w", err)
 	}
 
@@ -106,51 +113,27 @@ func (uc *OrderUseCase) Checkout(ctx context.Context, userID int64) (*entity.Ord
 		return nil, err
 	}
 
-	// Step 3: Decrement stock in catalog — compensate order on failure
-	rpcCtx, rpcCancel := context.WithTimeout(ctx, 2*time.Second)
-	defer rpcCancel()
-
-	_, rpcErr := uc.catalogClient.BatchUpdateProducts(rpcCtx, &catalogpb.BatchUpdateProductsRequest{
-		Updates: result.gRPCStockPayload,
-	})
-	if rpcErr != nil {
-		compensateCtx, compensateCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer compensateCancel()
-
-		if cancelErr := uc.UpdateStatus(compensateCtx, order.ID, entity.OrderStatusCancelled); cancelErr != nil {
-			log.Error("SAGA CRITICAL FAILURE: order created but compensation also failed",
-				"order_id", order.ID,
-				"rpc_err", rpcErr,
-				"cancel_err", cancelErr,
-			)
+	stockPayload := make(map[int64]int32)
+	for productID, updateData := range result.gRPCStockPayload {
+		if updateData != nil && updateData.Stock != nil {
+			stockPayload[productID] = *updateData.Stock
 		}
-		return nil, fmt.Errorf("checkout failed, order has been cancelled: %w", rpcErr)
 	}
 
-	// Step 4: Confirm the order — catalog stock is already decremented
-	if err := uc.orderRepo.UpdateStatus(ctx, order.ID, entity.OrderStatusConfirmed); err != nil {
-		log.Error("order confirmed in catalog but status update failed in DB",
-			"order_id", order.ID,
-			"err", err,
-		)
-	} else {
-		order.Status = entity.OrderStatusConfirmed
+	orderPlacedEvent := events.OrderPlacedEvent{
+		OrderID:      order.ID,
+		UserID:       userID,
+		TotalPrice:   order.TotalPrice,
+		StockUpdates: stockPayload,
 	}
 
-	// Step 5: Clear the cart — best effort, order is already confirmed
-	clearCtx, clearCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer clearCancel()
-
-	_, clearErr := uc.cartClient.ClearCart(clearCtx, &cartpb.ClearCartRequest{CartId: protoCart.GetId()})
-	if clearErr != nil {
-		log.Error("order confirmed but cart clear failed — cart may be stale",
-			"order_id", order.ID,
-			"cart_id", protoCart.GetId(),
-			"err", clearErr,
-		)
+	// Broadcast event over RabbitMQ wire. Catalog service catches it and writes local DB updates.
+	if err := uc.broker.Publish(ctx, "order.placed", orderPlacedEvent); err != nil {
+		log.Error("Order ledger written to database, but async queue notification failed", slog.Any("error", err))
 	}
 
 	return order, nil
+
 }
 
 type checkoutResult struct {

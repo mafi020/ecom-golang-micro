@@ -4,6 +4,7 @@ import (
 	"github.com/mafi020/ecom-golang-micro/config"
 	"github.com/mafi020/ecom-golang-micro/internal/infrastructure"
 	"github.com/mafi020/ecom-golang-micro/internal/usecase"
+	"github.com/mafi020/ecom-golang-micro/internal/utils"
 	"github.com/mafi020/ecom-golang-micro/rpc_client"
 )
 
@@ -11,8 +12,8 @@ type Usecases struct {
 	OrderUC *usecase.OrderUseCase
 }
 
-func RegisterUsecases(repos *Repositories, tm *infrastructure.Transactor, cfg *config.Config, rpcClients *rpc_client.Clients) *Usecases {
+func RegisterUsecases(repos *Repositories, tm *infrastructure.Transactor, cfg *config.Config, rpcClients *rpc_client.Clients, broker *utils.EventBroker) *Usecases {
 	return &Usecases{
-		OrderUC: usecase.NewOrderUseCase(repos.OrderRepo, repos.OrderItemRepo, rpcClients.Catalog, rpcClients.Cart, tm),
+		OrderUC: usecase.NewOrderUseCase(repos.OrderRepo, repos.OrderItemRepo, rpcClients.Catalog, rpcClients.Cart, tm, broker),
 	}
 }

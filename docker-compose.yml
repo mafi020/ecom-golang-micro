@@ -1,0 +1,287 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: ecom-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ecom_mesh
+
+  db-identity:
+    image: postgres:16-alpine
+    container_name: ecom-db-identity
+    ports:
+      - "5431:5432"
+    environment:
+      - POSTGRES_USER=${PG_IDENTITY_USER}
+      - POSTGRES_PASSWORD=${PG_IDENTITY_PASSWORD}
+      - POSTGRES_DB=${PG_IDENTITY_DB_NAME}
+    volumes:
+      - db_identity_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${PG_IDENTITY_USER} -d ${PG_IDENTITY_DB_NAME}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [ecom_mesh]
+
+  db-catalog:
+    image: postgres:16-alpine
+    container_name: ecom-db-catalog
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${PG_CATALOG_USER}
+      - POSTGRES_PASSWORD=${PG_CATALOG_PASSWORD}
+      - POSTGRES_DB=${PG_CATALOG_DB_NAME}
+    volumes:
+      - db_catalog_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${PG_CATALOG_USER} -d ${PG_CATALOG_DB_NAME}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [ecom_mesh]
+
+  db-cart:
+    image: postgres:16-alpine
+    container_name: ecom-db-cart
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=${PG_CART_USER}
+      - POSTGRES_PASSWORD=${PG_CART_PASSWORD}
+      - POSTGRES_DB=${PG_CART_DB_NAME}
+    volumes:
+      - db_cart_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_CART_USER} -d ${PG_CART_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [ecom_mesh]
+
+  db-order:
+    image: postgres:16-alpine
+    container_name: ecom-db-order
+    ports:
+      - "5434:5432"
+    environment:
+      - POSTGRES_USER=${PG_ORDER_USER}
+      - POSTGRES_PASSWORD=${PG_ORDER_PASSWORD}
+      - POSTGRES_DB=${PG_ORDER_DB_NAME}
+    volumes:
+      - db_order_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${PG_ORDER_USER} -d ${PG_ORDER_DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [ecom_mesh]
+
+  db-payment:
+    image: postgres:16-alpine
+    container_name: ecom-db-payment
+    ports:
+      - "5435:5432"
+    environment:
+      - POSTGRES_USER=${PG_PAYMENT_USER}
+      - POSTGRES_PASSWORD=${PG_PAYMENT_PASSWORD}
+      - POSTGRES_DB=${PG_PAYMENT_DB_NAME}
+    volumes:
+      - db_payment_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${PG_PAYMENT_USER} -d ${PG_PAYMENT_DB_NAME}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [ecom_mesh]
+
+  # ── GO MICROSERVICES ──
+  identity-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PATH: identity-service
+    container_name: ecom-identity-service
+    ports:
+      - "${IDENTITY_SERVICE_HTTP_PORT}:${IDENTITY_SERVICE_HTTP_PORT}"
+      - "${IDENTITY_SERVICE_GRPC_PORT}:${IDENTITY_SERVICE_GRPC_PORT}"
+    env_file:
+      - .env
+    environment:
+      - PG_IDENTITY_HOST=ecom-db-identity
+      - PG_IDENTITY_PORT=5432
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@ecom-rabbitmq:5672/
+    depends_on:
+      db-identity:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [ecom_mesh]
+
+  catalog-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PATH: catalog-service
+    container_name: ecom-catalog-service
+    ports:
+      - "${CATALOG_SERVICE_HTTP_PORT}:${CATALOG_SERVICE_HTTP_PORT}"
+      - "${CATALOG_SERVICE_GRPC_PORT}:${CATALOG_SERVICE_GRPC_PORT}"
+    env_file:
+      - .env
+    environment:
+      - PG_CATALOG_HOST=ecom-db-catalog
+      - PG_CATALOG_PORT=5432
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@ecom-rabbitmq:5672/
+    depends_on:
+      db-catalog:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks: [ecom_mesh]
+
+  cart-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PATH: cart-service
+    container_name: ecom-cart-service
+    ports:
+      - "${CART_SERVICE_HTTP_PORT}:${CART_SERVICE_HTTP_PORT}"
+      - "${CART_SERVICE_GRPC_PORT}:${CART_SERVICE_GRPC_PORT}"
+    env_file:
+      - .env
+    environment:
+      - PG_CART_HOST=ecom-db-cart
+      - PG_CART_PORT=5432
+      - CATALOG_GRPC_ADDR=ecom-catalog-service:${CATALOG_SERVICE_GRPC_PORT}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@ecom-rabbitmq:5672/
+    depends_on:
+      db-cart:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      catalog-service:
+        condition: service_started
+    networks: [ecom_mesh]
+
+  order-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PATH: order-service
+    container_name: ecom-order-service
+    ports:
+      - "${ORDER_SERVICE_HTTP_PORT}:${ORDER_SERVICE_HTTP_PORT}"
+      - "${ORDER_SERVICE_GRPC_PORT}:${ORDER_SERVICE_GRPC_PORT}"
+    env_file:
+      - .env
+    environment:
+      - PG_ORDER_HOST=ecom-db-order
+      - PG_ORDER_PORT=5432
+      - CATALOG_GRPC_ADDR=ecom-catalog-service:${CATALOG_SERVICE_GRPC_PORT}
+      - CART_GRPC_ADDR=ecom-cart-service:${CART_SERVICE_GRPC_PORT}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@ecom-rabbitmq:5672/
+    depends_on:
+      db-order:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      catalog-service:
+        condition: service_started
+      cart-service:
+        condition: service_started
+    networks: [ecom_mesh]
+
+  payment-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PATH: payment-service
+    container_name: ecom-payment-service
+    ports:
+      - "${PAYMENT_SERVICE_HTTP_PORT}:${PAYMENT_SERVICE_HTTP_PORT}"
+      - "${PAYMENT_SERVICE_GRPC_PORT}:${PAYMENT_SERVICE_GRPC_PORT}"
+    env_file:
+      - .env
+    environment:
+      - PG_PAYMENT_HOST=ecom-db-payment
+      - PG_PAYMENT_PORT=5432
+      - ORDER_GRPC_ADDR=ecom-order-service:${ORDER_SERVICE_GRPC_PORT}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@ecom-rabbitmq:5672/
+    depends_on:
+      db-payment:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      order-service:
+        condition: service_started
+    networks: [ecom_mesh]
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE_PATH: api-gateway
+    container_name: ecom-api-gateway
+    ports:
+      - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
+    env_file:
+      - .env
+    environment:
+      - IDENTITY_SERVICE_URL=http://ecom-identity-service:${IDENTITY_SERVICE_HTTP_PORT}
+      - CATALOG_SERVICE_URL=http://ecom-catalog-service:${CATALOG_SERVICE_HTTP_PORT}
+      - CART_SERVICE_URL=http://ecom-cart-service:${CART_SERVICE_HTTP_PORT}
+      - ORDER_SERVICE_URL=http://ecom-order-service:${ORDER_SERVICE_HTTP_PORT}
+      - PAYMENT_SERVICE_URL=http://ecom-payment-service:${PAYMENT_SERVICE_HTTP_PORT}
+    depends_on:
+      - identity-service
+      - catalog-service
+      - cart-service
+      - order-service
+      - payment-service
+    networks: [ecom_mesh]
+
+networks:
+  ecom_mesh:
+    driver: bridge
+
+volumes:
+  rabbitmq_data:
+  db_identity_data:
+  db_catalog_data:
+  db_cart_data:
+  db_order_data:
+  db_payment_data:

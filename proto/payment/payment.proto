@@ -37,7 +37,7 @@ message Payment {
   string transaction_id = 3;
   PaymentMethod method = 4;
   PaymentStatus status = 5;
-  int64 amount = 6;
+  int64 amount_cents = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
 

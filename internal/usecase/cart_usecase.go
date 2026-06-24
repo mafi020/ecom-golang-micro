@@ -7,6 +7,7 @@ import (
 
 	"github.com/mafi020/ecom-golang-micro/internal/apperrors"
 	"github.com/mafi020/ecom-golang-micro/internal/entity"
+	"github.com/mafi020/ecom-golang-micro/internal/utils"
 	catalogpb "github.com/mafi020/ecom-golang-micro/proto/catalog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -33,17 +34,20 @@ type CartUseCase struct {
 	cartItemRepo    cartItemRepo
 	cartProductRepo cartProductRepo
 	catalogClient   catalogpb.CatalogServiceClient
+	broker          *utils.EventBroker
 }
 
 func NewCartUsecase(
 	cartRepo cartRepo,
 	cartItemRepo cartItemRepo,
 	catalogClient catalogpb.CatalogServiceClient,
+	broker *utils.EventBroker,
 ) *CartUseCase {
 	return &CartUseCase{
 		cartRepo:      cartRepo,
 		cartItemRepo:  cartItemRepo,
 		catalogClient: catalogClient,
+		broker:        broker,
 	}
 }
 
@@ -163,42 +167,3 @@ func (uc *CartUseCase) prepareAndValidateStock(
 
 	return cart, product, totalQuantityRequested, nil
 }
-
-// func (uc *CartUseCase) prepareAndValidateStock2(
-// 	ctx context.Context,
-// 	userID, productID int64,
-// 	inputQuantity int32,
-// 	isAbsoluteUpdate bool,
-// ) (*entity.Cart, *entity.Product, int32, error) {
-// 	product, err := uc.cartProductRepo.GetByID(ctx, productID)
-// 	if err != nil {
-// 		return nil, nil, 0, err
-// 	}
-
-// 	cart, err := uc.cartRepo.GetOrCreateCart(ctx, userID)
-// 	if err != nil {
-// 		return nil, nil, 0, err
-// 	}
-
-// 	existingQuantityInCart := int32(0)
-// 	for _, item := range cart.Items {
-// 		if item.ProductID == productID {
-// 			existingQuantityInCart = item.Quantity
-// 			break
-// 		}
-// 	}
-
-// 	// Determine requested amount depending on action type
-// 	totalQuantityRequested := inputQuantity
-// 	if !isAbsoluteUpdate {
-// 		totalQuantityRequested = existingQuantityInCart + inputQuantity
-// 	}
-
-// 	if product.Stock < totalQuantityRequested {
-// 		return nil, nil, 0, &apperrors.BadRequestError{
-// 			Errors: map[string]string{"quantity": "insufficient stock"},
-// 		}
-// 	}
-
-// 	return cart, product, totalQuantityRequested, nil
-// }

@@ -1,0 +1,12 @@
+.git
+.gitignore
+.idea/
+.vscode/
+bin/
+*.exe
+*.test
+*.out
+vendor/
+notes.txt
+structure.txt
+.air.*.toml
