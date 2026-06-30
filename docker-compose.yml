@@ -8,6 +8,7 @@ services:
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+      - RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS=-rabbitmq deprecated_features.permit.management_metrics_collection
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -18,114 +19,34 @@ services:
     networks:
       - ecom_mesh
 
-  db-identity:
+  ecom-postgres:
     image: postgres:16-alpine
-    container_name: ecom-db-identity
-    ports:
-      - "5431:5432"
-    environment:
-      - POSTGRES_USER=${PG_IDENTITY_USER}
-      - POSTGRES_PASSWORD=${PG_IDENTITY_PASSWORD}
-      - POSTGRES_DB=${PG_IDENTITY_DB_NAME}
-    volumes:
-      - db_identity_data:/var/lib/postgresql/data
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${PG_IDENTITY_USER} -d ${PG_IDENTITY_DB_NAME}",
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks: [ecom_mesh]
-
-  db-catalog:
-    image: postgres:16-alpine
-    container_name: ecom-db-catalog
+    container_name: ecom-postgres
     ports:
       - "5432:5432"
     environment:
-      - POSTGRES_USER=${PG_CATALOG_USER}
-      - POSTGRES_PASSWORD=${PG_CATALOG_PASSWORD}
-      - POSTGRES_DB=${PG_CATALOG_DB_NAME}
+      - POSTGRES_USER=${PG_SHARED_USER:-postgres}
+      - POSTGRES_PASSWORD=${PG_SHARED_PASSWORD:-password}
+      - POSTGRES_DB=ecom_main
+      - POSTGRES_MULTIPLE_DATABASES=ecom_identity,ecom_catalog,ecom_cart,ecom_order,ecom_payment
     volumes:
-      - db_catalog_data:/var/lib/postgresql/data
+      - ecom_postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-multiple-databases.sh:/docker-entrypoint-initdb.d/init-multiple-databases.sh:ro
+    command: postgres -c shared_buffers=64MB -c max_connections=50 -c work_mem=4MB
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${PG_CATALOG_USER} -d ${PG_CATALOG_DB_NAME}",
-        ]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ecom_main"]
       interval: 5s
       timeout: 5s
-      retries: 10
-    networks: [ecom_mesh]
-
-  db-cart:
-    image: postgres:16-alpine
-    container_name: ecom-db-cart
-    ports:
-      - "5433:5432"
-    environment:
-      - POSTGRES_USER=${PG_CART_USER}
-      - POSTGRES_PASSWORD=${PG_CART_PASSWORD}
-      - POSTGRES_DB=${PG_CART_DB_NAME}
-    volumes:
-      - db_cart_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PG_CART_USER} -d ${PG_CART_DB_NAME}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks: [ecom_mesh]
-
-  db-order:
-    image: postgres:16-alpine
-    container_name: ecom-db-order
-    ports:
-      - "5434:5432"
-    environment:
-      - POSTGRES_USER=${PG_ORDER_USER}
-      - POSTGRES_PASSWORD=${PG_ORDER_PASSWORD}
-      - POSTGRES_DB=${PG_ORDER_DB_NAME}
-    volumes:
-      - db_order_data:/var/lib/postgresql/data
-    healthcheck:
-      test:
-        ["CMD-SHELL", "pg_isready -U ${PG_ORDER_USER} -d ${PG_ORDER_DB_NAME}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks: [ecom_mesh]
-
-  db-payment:
-    image: postgres:16-alpine
-    container_name: ecom-db-payment
-    ports:
-      - "5435:5432"
-    environment:
-      - POSTGRES_USER=${PG_PAYMENT_USER}
-      - POSTGRES_PASSWORD=${PG_PAYMENT_PASSWORD}
-      - POSTGRES_DB=${PG_PAYMENT_DB_NAME}
-    volumes:
-      - db_payment_data:/var/lib/postgresql/data
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${PG_PAYMENT_USER} -d ${PG_PAYMENT_DB_NAME}",
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    networks: [ecom_mesh]
+      retries: 5
+    networks:
+      - ecom_mesh
 
   # ── GO MICROSERVICES ──
   identity-service:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
       args:
         SERVICE_PATH: identity-service
     container_name: ecom-identity-service
@@ -134,12 +55,20 @@ services:
       - "${IDENTITY_SERVICE_GRPC_PORT}:${IDENTITY_SERVICE_GRPC_PORT}"
     env_file:
       - .env
+    volumes:
+      - .:/app
     environment:
-      - PG_IDENTITY_HOST=ecom-db-identity
+      - SERVICE_PATH=identity-service
+      - GOFLAGS=-p=1
+      # Explicitly mapping all database context elements to container spaces
+      - PG_IDENTITY_HOST=ecom-postgres
       - PG_IDENTITY_PORT=5432
+      - PG_IDENTITY_USER=${PG_IDENTITY_USER}
+      - PG_IDENTITY_PASSWORD=${PG_IDENTITY_PASSWORD}
+      - PG_IDENTITY_DB_NAME=${PG_IDENTITY_DB_NAME}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@ecom-rabbitmq:5672/
     depends_on:
-      db-identity:
+      ecom-postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -149,6 +78,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
       args:
         SERVICE_PATH: catalog-service
     container_name: ecom-catalog-service
@@ -157,12 +87,20 @@ services:
       - "${CATALOG_SERVICE_GRPC_PORT}:${CATALOG_SERVICE_GRPC_PORT}"
     env_file:
       - .env
+    volumes:
+      - .:/app
     environment:
-      - PG_CATALOG_HOST=ecom-db-catalog
+      - SERVICE_PATH=catalog-service
+      - GOFLAGS=-p=1
+      # Explicitly mapping all database context elements to container spaces
+      - PG_CATALOG_HOST=ecom-postgres
       - PG_CATALOG_PORT=5432
+      - PG_CATALOG_USER=${PG_CATALOG_USER}
+      - PG_CATALOG_PASSWORD=${PG_CATALOG_PASSWORD}
+      - PG_CATALOG_DB_NAME=${PG_CATALOG_DB_NAME}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@ecom-rabbitmq:5672/
     depends_on:
-      db-catalog:
+      ecom-postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -172,6 +110,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
       args:
         SERVICE_PATH: cart-service
     container_name: ecom-cart-service
@@ -180,13 +119,21 @@ services:
       - "${CART_SERVICE_GRPC_PORT}:${CART_SERVICE_GRPC_PORT}"
     env_file:
       - .env
+    volumes:
+      - .:/app
     environment:
-      - PG_CART_HOST=ecom-db-cart
+      - SERVICE_PATH=cart-service
+      - GOFLAGS=-p=1
+      # Explicitly mapping all database context elements to container spaces
+      - PG_CART_HOST=ecom-postgres
       - PG_CART_PORT=5432
+      - PG_CART_USER=${PG_CART_USER}
+      - PG_CART_PASSWORD=${PG_CART_PASSWORD}
+      - PG_CART_DB_NAME=${PG_CART_DB_NAME}
       - CATALOG_GRPC_ADDR=ecom-catalog-service:${CATALOG_SERVICE_GRPC_PORT}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@ecom-rabbitmq:5672/
     depends_on:
-      db-cart:
+      ecom-postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -198,6 +145,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
       args:
         SERVICE_PATH: order-service
     container_name: ecom-order-service
@@ -206,14 +154,22 @@ services:
       - "${ORDER_SERVICE_GRPC_PORT}:${ORDER_SERVICE_GRPC_PORT}"
     env_file:
       - .env
+    volumes:
+      - .:/app
     environment:
-      - PG_ORDER_HOST=ecom-db-order
+      - SERVICE_PATH=order-service
+      - GOFLAGS=-p=1
+      # Explicitly mapping all database context elements to container spaces
+      - PG_ORDER_HOST=ecom-postgres
       - PG_ORDER_PORT=5432
+      - PG_ORDER_USER=${PG_ORDER_USER}
+      - PG_ORDER_PASSWORD=${PG_ORDER_PASSWORD}
+      - PG_ORDER_DB_NAME=${PG_ORDER_DB_NAME}
       - CATALOG_GRPC_ADDR=ecom-catalog-service:${CATALOG_SERVICE_GRPC_PORT}
       - CART_GRPC_ADDR=ecom-cart-service:${CART_SERVICE_GRPC_PORT}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@ecom-rabbitmq:5672/
     depends_on:
-      db-order:
+      ecom-postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -227,6 +183,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
       args:
         SERVICE_PATH: payment-service
     container_name: ecom-payment-service
@@ -235,13 +192,21 @@ services:
       - "${PAYMENT_SERVICE_GRPC_PORT}:${PAYMENT_SERVICE_GRPC_PORT}"
     env_file:
       - .env
+    volumes:
+      - .:/app
     environment:
-      - PG_PAYMENT_HOST=ecom-db-payment
+      - SERVICE_PATH=payment-service
+      - GOFLAGS=-p=1
+      # Explicitly mapping all database context elements to container spaces
+      - PG_PAYMENT_HOST=ecom-postgres
       - PG_PAYMENT_PORT=5432
+      - PG_PAYMENT_USER=${PG_PAYMENT_USER}
+      - PG_PAYMENT_PASSWORD=${PG_PAYMENT_PASSWORD}
+      - PG_PAYMENT_DB_NAME=${PG_PAYMENT_DB_NAME}
       - ORDER_GRPC_ADDR=ecom-order-service:${ORDER_SERVICE_GRPC_PORT}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@ecom-rabbitmq:5672/
     depends_on:
-      db-payment:
+      ecom-postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
@@ -253,6 +218,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: dev
       args:
         SERVICE_PATH: api-gateway
     container_name: ecom-api-gateway
@@ -260,7 +226,11 @@ services:
       - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
     env_file:
       - .env
+    volumes:
+      - .:/app
     environment:
+      - SERVICE_PATH=api-gateway
+      - GOFLAGS=-p=1
       - IDENTITY_SERVICE_URL=http://ecom-identity-service:${IDENTITY_SERVICE_HTTP_PORT}
       - CATALOG_SERVICE_URL=http://ecom-catalog-service:${CATALOG_SERVICE_HTTP_PORT}
       - CART_SERVICE_URL=http://ecom-cart-service:${CART_SERVICE_HTTP_PORT}
@@ -280,8 +250,4 @@ networks:
 
 volumes:
   rabbitmq_data:
-  db_identity_data:
-  db_catalog_data:
-  db_cart_data:
-  db_order_data:
-  db_payment_data:
+  ecom_postgres_data:

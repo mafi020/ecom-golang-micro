@@ -36,6 +36,9 @@ type Config struct {
 	} `mapstructure:",squash"` // Allows it to find PORT at the top level of .env
 
 	Postgres struct {
+		PgSharedUser     string `mapstructure:"PG_SHARED_USER"`
+		PgSharedPassword string `mapstructure:"PG_SHARED_PASSWORD"`
+
 		PgIdentityHost     string `mapstructure:"PG_IDENTITY_HOST"`
 		PgIdentityPort     int    `mapstructure:"PG_IDENTITY_PORT"`
 		PgIdentityUser     string `mapstructure:"PG_IDENTITY_USER"`

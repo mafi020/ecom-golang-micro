@@ -134,7 +134,7 @@ proto-gen: proto-clean
 
 # ── DOCKER LIFECYCLE COMMANDS ─────────────────────────────────────────────────
 
-DOCKER_SERVICES = identity-service catalog-service cart-service order-service payment-service api-gateway
+DOCKER_SERVICES = ecom-postgres rabbitmq identity-service catalog-service cart-service order-service payment-service api-gateway
 
 # Build each service image one at a time — avoids 6 parallel Go compiles
 # fighting over the same CPU/RAM during the first build.
@@ -142,6 +142,10 @@ docker-build-seq:
 	@for svc in $(DOCKER_SERVICES); do \
 		echo "==> Building $$svc..."; \
 		docker compose build $$svc || exit 1; \
+		echo "==> Starting $$svc..."; \
+		docker compose up -d $$svc || exit 1; \
+		echo "==> Giving $$svc a moment to stabilize..."; \
+		sleep 4; \
 	done
 	@echo "All service images built successfully."
 

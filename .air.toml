@@ -1,0 +1,44 @@
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "bin/tmp-${SERVICE_PATH}"
+
+[build]
+  args_bin = []
+  # 1. FIX: Keep it clean and point straight to your relative package folder path
+  cmd = "go build -buildvcs=false -o ./bin/tmp-${SERVICE_PATH}/backend-bin ./cmd/${SERVICE_PATH}"
+  
+  # 2. FIX: Ensure Air launches the exact executable binary it just compiled
+  entrypoint = "./bin/tmp-${SERVICE_PATH}/backend-bin"
+  
+  # 3. CRITICAL: Force Air to look inside these exact shared directory structures
+  include_dir = ["cmd", "internal", "config", "pkg"]
+
+  
+  # MEMORY OPTIMIZATION: Stop listening to raw file changes instantly to save memory pools
+  poll = true # Turning poll off drops CPU and RAM consumption inside WSL2 drastically
+  poll_interval = 1500
+  delay = 2000
+  send_interrupt = true
+  stop_on_error = true
+  clean_on_exit = true
+
+  include_ext = ["go", "sql", "toml"]
+  
+  # CRITICAL MEMORY FIX: Force Air to stop looking inside massive system cache boundaries
+  exclude_dir = ["assets", "bin", "vendor", ".git", ".vscode", ".idea", "tmp"]
+  exclude_regex = ["_test.go"]
+  exclude_unchanged = true
+
+[log]
+  main_only = true # Suppresses clutter to stop standard out buffer exhaustion
+  time = true
+
+[color]
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[screen]
+  clear_on_rebuild = true
+  keep_scroll = true
