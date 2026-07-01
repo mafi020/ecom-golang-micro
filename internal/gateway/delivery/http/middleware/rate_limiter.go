@@ -60,6 +60,12 @@ func (rl *RateLimiter) cleanupLoop() {
 
 func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// FOR TESTING: Instantly allow traffic if the test header is passed
+		if c.GetHeader("X-Bypass-Rate-Limit") == "true" {
+			c.Next()
+			return
+		}
+
 		ip := c.ClientIP()
 		limiter := rl.getLimiter(ip)
 

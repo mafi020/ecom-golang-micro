@@ -1,7 +1,7 @@
 include .env
 
 
-.PHONY: clean prepare kill reset restart dev-gateway dev-catalog dev-cart dev-order dev-payment dev-identity install-golang-migrate migration-version migration migrate-up migrate-down migrate-reset migrate-force proto-clean proto-gen docker-build-seq docker-up docker-up-d docker-rebuild docker-down docker-reset docker-logs
+.PHONY: clean prepare kill reset restart dev-gateway dev-catalog dev-cart dev-order dev-payment dev-identity install-golang-migrate migration-version migration migrate-up migrate-down migrate-reset migrate-force proto-clean proto-gen docker-build-seq docker-up docker-up-d docker-rebuild docker-down docker-reset docker-logs stress-test
 
 # --- DYNAMIC DATABASE MIGRATION STRATEGY ---
 
@@ -171,3 +171,18 @@ docker-reset:
 # Tail logs for everything, or one service: make docker-logs svc=order-service
 docker-logs:
 	docker compose logs -f $(svc)
+
+# Stress Test
+# Path configurations
+STRESS_SCRIPT = ./scripts/stress_test.js
+
+stress-test:
+	@echo "==> Verifying load-testing scripts..."
+	@echo "=================================================================="
+	@echo " INITIATING CONCURRENT STRESS TEST AGAINST API GATEWAY "
+	@echo " Target: http://localhost:8000/api/products"
+	@echo " Profile: Max 50 Virtual Users over 50 seconds"
+	@echo "=================================================================="
+	@echo " Tip: Open another terminal and run 'docker stats' to watch RAM!"
+	@ping 127.0.0.1 -n 3 > nul
+	k6 run $(STRESS_SCRIPT)
