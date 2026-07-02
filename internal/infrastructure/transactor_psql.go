@@ -29,7 +29,7 @@ func (t *Transactor) WithinTransaction(ctx context.Context, fn func(ctx context.
 	err = fn(txCtx)
 	if err != nil {
 		tx.Rollback()
-		return err
+		return fmt.Errorf("Rollback tx due to error: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {

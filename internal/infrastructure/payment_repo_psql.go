@@ -18,7 +18,6 @@ func NewPostgresPaymentRepository(db *sql.DB) *PostgresPaymentRepository {
 	return &PostgresPaymentRepository{db: db}
 }
 
-// Create persists the core ledger entry using our universal internal transaction UUID
 func (r *PostgresPaymentRepository) Create(ctx context.Context, payment *entity.Payment) (*entity.Payment, error) {
 	query := `
 		INSERT INTO payments (order_id, transaction_id, method, status, amount_cents)
@@ -52,7 +51,6 @@ func (r *PostgresPaymentRepository) Create(ctx context.Context, payment *entity.
 	return payment, nil
 }
 
-// CreateOnlineTransaction maps third party verification provider payloads
 func (r *PostgresPaymentRepository) CreateOnlineTransaction(ctx context.Context, tx *entity.OnlineTransaction) (*entity.OnlineTransaction, error) {
 	query := `
 		INSERT INTO online_transactions (payment_id, provider, gateway_ref, gateway_status, raw_response)
@@ -99,7 +97,6 @@ func (r *PostgresPaymentRepository) CreateOnlineTransaction(ctx context.Context,
 	return tx, nil
 }
 
-// CreateCODDetail logs downstream physical checkout verification hooks
 func (r *PostgresPaymentRepository) CreateCODDetail(ctx context.Context, detail *entity.CODDetail) (*entity.CODDetail, error) {
 	query := `
 		INSERT INTO cod_details (payment_id, collected_at)
@@ -131,7 +128,6 @@ func (r *PostgresPaymentRepository) CreateCODDetail(ctx context.Context, detail 
 	return detail, nil
 }
 
-// GetPaymentByOrderID fetches payment metadata using a single row scan
 func (r *PostgresPaymentRepository) GetPaymentByOrderID(ctx context.Context, orderID int64) (*entity.Payment, error) {
 	query := `
 		SELECT p.id, p.order_id, p.transaction_id, p.method, p.status, p.amount_cents, p.created_at, p.updated_at,
@@ -231,7 +227,6 @@ func (r *PostgresPaymentRepository) GetPaymentByOrderID(ctx context.Context, ord
 	return payment, nil
 }
 
-// UpdateStatus changes the state of the payment transaction ledger row
 func (r *PostgresPaymentRepository) UpdateStatus(ctx context.Context, id int64, status entity.PaymentStatus) error {
 	query := `UPDATE payments SET status = $1, updated_at = NOW() WHERE id = $2`
 
@@ -248,7 +243,6 @@ func (r *PostgresPaymentRepository) UpdateStatus(ctx context.Context, id int64, 
 	return nil
 }
 
-// UpdateCODDetail validates and closes financial accounting milestones
 func (r *PostgresPaymentRepository) UpdateCODDetail(ctx context.Context, paymentID int64, detail *entity.CODDetail) (*entity.CODDetail, error) {
 	query := `
 		UPDATE cod_details

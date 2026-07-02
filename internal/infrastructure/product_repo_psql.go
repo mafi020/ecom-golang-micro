@@ -38,7 +38,7 @@ func (r *PostgresProductRepository) Create(ctx context.Context, product *entity.
 	if err != nil {
 		return err
 	}
-	return fmt.Errorf("failed to create product %w", err)
+	return nil
 }
 
 func (r *PostgresProductRepository) List(ctx context.Context, params entity.GetProductsParams) ([]entity.Product, int, error) {
@@ -204,13 +204,6 @@ func (r *PostgresProductRepository) BatchUpdate(ctx context.Context, updates map
 	if len(updates) == 0 {
 		return nil
 	}
-
-	// Builds:
-	// UPDATE products SET
-	//     name        = CASE WHEN id = $1 THEN COALESCE($2,  name)        ELSE name        END,
-	//     description = CASE WHEN id = $1 THEN COALESCE($3,  description) ELSE description END,
-	//     ...
-	// WHERE id IN ($1, $7, ...)
 
 	nameCases := make([]string, 0, len(updates))
 	descCases := make([]string, 0, len(updates))

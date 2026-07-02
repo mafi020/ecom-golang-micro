@@ -185,46 +185,6 @@ func (r *PostgresCategoryRepository) GetAllCategories(ctx context.Context, param
 	return categories, total, nil
 }
 
-// func (r *PostgresCategoryRepository) GetAllCategories(ctx context.Context) ([]*entity.Category, error) {
-// 	query := `SELECT id, name, slug, parent_id, created_at, updated_at
-// 	FROM categories`
-
-// 	rows, err := r.db.QueryContext(ctx, query)
-
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	defer rows.Close()
-
-// 	var categories []*entity.Category
-
-// 	for rows.Next() {
-// 		category := &entity.Category{}
-// 		var parentID sql.NullInt64 // use NullInt64 to safely scan nullable column
-// 		err := rows.Scan(
-// 			&category.ID,
-// 			&category.Name,
-// 			&category.Slug,
-// 			&parentID,
-// 			&category.CreatedAt,
-// 			&category.UpdatedAt,
-// 		)
-
-// 		if err != nil {
-// 			return nil, err
-// 		}
-
-// 		// Only assign if the value is not NULL
-// 		if parentID.Valid {
-// 			category.ParentID = &parentID.Int64
-// 		}
-
-// 		categories = append(categories, category)
-// 	}
-// 	return categories, nil
-// }
-
 func (r *PostgresCategoryRepository) UpdateCategory(ctx context.Context, category *entity.Category) error {
 	query := `
 		UPDATE categories

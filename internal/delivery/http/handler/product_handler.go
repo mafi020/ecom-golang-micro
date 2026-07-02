@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
@@ -32,7 +33,7 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 	product := entity.NewProduct(req.Name, req.Description, req.PriceCents, req.Stock, req.CategoryID)
 
 	if err := h.productUsecase.Create(c.Request.Context(), product); err != nil {
-		slog.Error("failed to create product", slog.Any("error", err))
+		slog.Error("failed to create product", slog.Any("error", fmt.Errorf("failed to create product %w", err)))
 		utils.HandleError(c, err)
 		return
 	}

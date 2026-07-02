@@ -28,7 +28,17 @@ func (h *CategoryHandler) CreateCategory(c *gin.Context) {
 		return
 	}
 
-	category, err := h.categoryUseCase.CreateCategory(c.Request.Context(), body.Name, body.ParentID)
+	var parentIDParam *int64
+	if body.ParentID != nil {
+		// ParentID was provided in the JSON payload
+		parentIDParam = body.ParentID
+	} else {
+		// ParentID was NOT provided (it is nil)
+		// You can explicitly set it to nil, or handle root-category business logic here
+		parentIDParam = nil
+	}
+
+	category, err := h.categoryUseCase.CreateCategory(c.Request.Context(), body.Name, parentIDParam)
 
 	if err != nil {
 		slog.Error("failed to create category", slog.Any("error", err))

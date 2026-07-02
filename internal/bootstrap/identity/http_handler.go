@@ -18,25 +18,24 @@ func RegisterHTTPHandlers(r *gin.Engine, uc *Usecases, cfg *config.Config) {
 	authHandler := handler.NewAuthHandler(uc.AuthUC)
 	userHandler := handler.NewUserHandler(uc.UserUC)
 
-	// ── 1. PUBLIC AUTH ENGINES ───────────────────────────────────────────────
-	// Gateway forwards "/api/auth/login" -> trimmed to "/login"
-	// Gateway forwards "/api/auth/register" -> trimmed to "/register"
-	// Gateway forwards "/api/auth/refresh" -> trimmed to "/refresh"
-	r.POST("/register", authHandler.Register)
-	r.POST("/login", authHandler.Login)
-	r.POST("/refresh", authHandler.RefreshToken)
-
-	// ── 2. PROTECTED AUTH ENGINES ────────────────────────────────────────────
-	// Gateway forwards "/api/auth/logout" -> trimmed to "/logout"
-	r.POST("/logout", authHandler.Logout)
-
-	// ── 3. PROTECTED USER ENGINES ────────────────────────────────────────────
-	// Gateway forwards "/api/users/:id" -> trimmed to "/:id"
-	// Gateway forwards "/api/users" -> trimmed to "/"
-	users := r.Group("/")
-	users.Use(middleware.AuthMiddleware())
+	auth := r.Group("/auth")
 	{
-		users.GET("/:id", userHandler.GetUserByID)
-		users.GET("/", userHandler.GetUsers) // 🚀 FIXED: Changed from "" to "/" to catch root requests cleanly
+		auth.POST("/register", authHandler.Register)
+		auth.POST("/login", authHandler.Login)
+		auth.POST("/refresh", authHandler.RefreshToken)
+	}
+
+	// Protected — gateway strips /api, forwards /auth/logout and /users/*
+	// Gateway already verified the JWT, so AuthMiddleware here just reads headers
+	protected := r.Group("")
+	protected.Use(middleware.AuthMiddleware())
+	{
+		protected.POST("/auth/logout", authHandler.Logout)
+
+		users := protected.Group("/users")
+		{
+			users.GET("/:id", userHandler.GetUserByID)
+			users.GET("", userHandler.GetUsers)
+		}
 	}
 }

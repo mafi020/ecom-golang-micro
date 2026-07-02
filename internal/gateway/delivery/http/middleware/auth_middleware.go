@@ -20,14 +20,25 @@ var publicEndpoints = map[string]bool{
 func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Check if the request path is in the public endpoints list
-		if publicEndpoints[c.Request.URL.Path] {
+		// if publicEndpoints[c.Request.URL.Path] {
+		// 	c.Next()
+		// 	return
+		// }
+
+		isPublic := publicEndpoints[c.Request.URL.Path]
+
+		// Proceed with JWT validation for all other protected routes
+		authHeader := c.GetHeader("Authorization")
+
+		// 1. If it's a public route and there is no token, treat them as an anonymous guest cleanly
+		if isPublic && (authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ")) {
 			c.Next()
 			return
 		}
-		// Proceed with JWT validation for all other protected routes
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid token"})
+
+		// 2. If it's a private route and token is missing, block them instantly
+		if !isPublic && (authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ")) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing or invalid token signature"})
 			c.Abort()
 			return
 		}
@@ -54,11 +65,13 @@ func AuthMiddleware(jwtSecret string) gin.HandlerFunc {
 			return
 		}
 
-		userID := int64(claims["sub"].(float64))
-		userRole := claims["role"].(string)
-
-		c.Set("user_id", userID)
-		c.Set("role", userRole)
+		// Set credentials on context
+		if sub, ok := claims["sub"].(float64); ok {
+			c.Set("user_id", int64(sub))
+		}
+		if role, ok := claims["role"].(string); ok {
+			c.Set("role", role)
+		}
 
 		c.Next()
 	}

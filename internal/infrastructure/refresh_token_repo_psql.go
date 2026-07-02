@@ -70,5 +70,5 @@ func (r *PostgresRefreshTokenRepository) DeleteByToken(ctx context.Context, toke
 
 func (r *PostgresRefreshTokenRepository) DeleteAllByUserID(ctx context.Context, userID int64) error {
 	_, err := r.db.ExecContext(ctx, "DELETE FROM refresh_tokens WHERE user_id = $1", userID)
-	return err
+	return fmt.Errorf("failed to delete refresh tokens for user %d: %w", userID, err)
 }
